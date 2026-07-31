@@ -1,18 +1,38 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from './store/store'
+import { useAuth } from './store/auth'
+import { syncNow } from './store/sync'
 import { CharacterList } from './screens/CharacterList'
 import { CharacterCreator } from './screens/CharacterCreator'
 import { CharacterSheet } from './screens/CharacterSheet'
 import { CloudTab } from './screens/CloudTab'
+import { LoginScreen, SplashLoading } from './screens/LoginScreen'
 import { DiceRollerSheet, RollToast } from './components/DiceRoller'
 
 type View = 'lista' | 'criar' | 'ficha' | 'nuvem'
 
 export default function App() {
   const { characters, activeId, setActive } = useStore()
+  const { ready, session, offline, init } = useAuth()
   const [view, setView] = useState<View>('lista')
   const [roller, setRoller] = useState(false)
   const [online, setOnline] = useState(navigator.onLine)
+
+  // Verifica a sessão salva assim que o app abre.
+  useEffect(() => {
+    init()
+  }, [init])
+
+  // Sincroniza automaticamente ao entrar (uma vez por usuário logado).
+  const syncedFor = useRef<string | null>(null)
+  useEffect(() => {
+    const uid = session?.user?.id ?? null
+    if (uid && online && syncedFor.current !== uid) {
+      syncedFor.current = uid
+      syncNow()
+    }
+    if (!uid) syncedFor.current = null
+  }, [session, online])
 
   useEffect(() => {
     const on = () => setOnline(true)
@@ -31,6 +51,11 @@ export default function App() {
   useEffect(() => {
     if (view === 'ficha' && !char) setView('lista')
   }, [view, char])
+
+  // Enquanto verificamos a sessão salva, mostramos um splash curtinho.
+  if (!ready) return <SplashLoading />
+  // Sem sessão e sem ter escolhido o modo offline → tela de login.
+  if (!session && !offline) return <LoginScreen />
 
   return (
     <div className="app">

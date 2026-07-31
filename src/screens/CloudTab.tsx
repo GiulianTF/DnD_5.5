@@ -1,22 +1,20 @@
 import { useState } from 'react'
 import { useStore } from '../store/store'
-import { isConfigured, syncNow, exportarJSON } from '../store/sync'
+import { useAuth } from '../store/auth'
+import { syncNow, exportarJSON } from '../store/sync'
 import { Card } from '../components/ui'
 
 export function CloudTab({ online }: { online: boolean }) {
-  const { supabaseUrl, supabaseKey, setSupabase, lastSync, characters } = useStore()
-  const [url, setUrl] = useState(supabaseUrl)
-  const [key, setKey] = useState(supabaseKey)
+  const { lastSync, characters } = useStore()
+  const { session, signOut, setOffline } = useAuth()
   const [status, setStatus] = useState<{ ok: boolean; message: string } | null>(null)
   const [sincronizando, setSincronizando] = useState(false)
   const [instalavel, setInstalavel] = useState<Event | null>(
     (window as unknown as { __pwaPrompt?: Event }).__pwaPrompt ?? null,
   )
 
-  const salvar = () => {
-    setSupabase(url.trim(), key.trim())
-    setStatus({ ok: true, message: 'Credenciais salvas neste aparelho.' })
-  }
+  const logado = Boolean(session)
+  const email = session?.user?.email ?? ''
 
   const sincronizar = async () => {
     setSincronizando(true)
@@ -41,16 +39,38 @@ export function CloudTab({ online }: { online: boolean }) {
             {online ? '🟢 Online' : '🔴 Offline'}
           </span>
           <span className="pill">{characters.length} ficha(s) no aparelho</span>
-          <span className="pill">{isConfigured() ? '☁ Supabase configurado' : '☁ Supabase não configurado'}</span>
+          <span className="pill">{logado ? '👤 Conta conectada' : '👤 Sem conta'}</span>
         </div>
         <p className="muted tiny" style={{ marginTop: 10, lineHeight: 1.55 }}>
           O aplicativo funciona 100% offline: todas as fichas ficam salvas no próprio aparelho.
-          A nuvem é opcional e serve para você acessar as mesmas fichas em outro dispositivo.
+          Com uma conta, elas também ficam na nuvem e você acessa as mesmas fichas em qualquer aparelho.
         </p>
         {lastSync && (
           <div className="tiny muted" style={{ marginTop: 6 }}>
             Última sincronização: {new Date(lastSync).toLocaleString('pt-BR')}
           </div>
+        )}
+      </Card>
+
+      <Card title="Conta">
+        {logado ? (
+          <>
+            <p className="muted tiny" style={{ marginBottom: 10 }}>
+              Conectado como <strong style={{ color: 'var(--text)' }}>{email}</strong>. Suas fichas
+              são salvas na nuvem e visíveis somente para você.
+            </p>
+            <button style={{ width: '100%' }} onClick={() => signOut()}>Sair da conta</button>
+          </>
+        ) : (
+          <>
+            <p className="muted tiny" style={{ marginBottom: 10 }}>
+              Você está usando sem conta — as fichas ficam apenas neste aparelho. Entre ou crie uma
+              conta para guardá-las na nuvem e usá-las em outros dispositivos.
+            </p>
+            <button className="primary" style={{ width: '100%' }} onClick={() => setOffline(false)}>
+              Entrar ou criar conta
+            </button>
+          </>
         )}
       </Card>
 
@@ -65,28 +85,29 @@ export function CloudTab({ online }: { online: boolean }) {
         </button>
       </Card>
 
-      <Card title="Credenciais do Supabase">
-        <p className="muted tiny" style={{ marginBottom: 10, lineHeight: 1.55 }}>
-          Cole a URL e a chave <strong>anon</strong> do seu projeto (Configurações → API).
-          Elas ficam salvas só neste aparelho. Rode o script <code>supabase/schema.sql</code> no
-          SQL Editor do seu projeto antes da primeira sincronização.
-        </p>
-        <label>URL do projeto</label>
-        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://xxxx.supabase.co" autoComplete="off" />
-        <label style={{ marginTop: 10 }}>Chave anon (pública)</label>
-        <input value={key} onChange={(e) => setKey(e.target.value)} placeholder="eyJhbGciOi..." autoComplete="off" />
-        <button style={{ width: '100%', marginTop: 12 }} onClick={salvar}>Salvar credenciais</button>
-      </Card>
-
       <Card title="Sincronizar">
         <p className="muted tiny" style={{ marginBottom: 10 }}>
           A sincronização é nos dois sentidos. Quando a mesma ficha existe nos dois lados,
           vence a versão editada mais recentemente.
         </p>
-        <button className="primary" style={{ width: '100%' }} disabled={!online || !isConfigured() || sincronizando} onClick={sincronizar}>
+        <button
+          className="primary"
+          style={{ width: '100%' }}
+          disabled={!online || !logado || sincronizando}
+          onClick={sincronizar}
+        >
           {sincronizando ? 'Sincronizando...' : '☁ Sincronizar agora'}
         </button>
-        {!online && <div className="muted tiny center" style={{ marginTop: 8 }}>Você está offline — suas fichas continuam salvas no aparelho.</div>}
+        {!logado && (
+          <div className="muted tiny center" style={{ marginTop: 8 }}>
+            Entre com uma conta para sincronizar na nuvem.
+          </div>
+        )}
+        {!online && logado && (
+          <div className="muted tiny center" style={{ marginTop: 8 }}>
+            Você está offline — suas fichas continuam salvas no aparelho.
+          </div>
+        )}
         {status && <div className={`banner ${status.ok ? 'ok' : 'warn'}`} style={{ marginTop: 12 }}>{status.message}</div>}
       </Card>
 
