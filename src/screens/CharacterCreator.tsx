@@ -8,13 +8,16 @@ import { SKILLS, skillById } from '../data/skills'
 import { SPELLS } from '../data/spells'
 import { ORIGIN_FEATS, featById } from '../data/feats'
 import { WEAPONS, ARMORS, SHIELD, GEAR, MASTERY_DESC, itemById } from '../data/equipment'
-import { abilityMod, fmtMod, cantripLimit, preparedLimit, maxSpellLevel, masteryEligibleWeapons } from '../engine/rules'
+import {
+  abilityMod, fmtMod, cantripLimit, innateSpells, preparedLimit, maxSpellLevel,
+  masteryEligibleWeapons, spellPickGroups,
+} from '../engine/rules'
 import { POINT_BUY_COST, STANDARD_ARRAY, emptyScores, pointBuyRemaining } from '../engine/pointbuy'
 import { roll4d6DropLowest } from '../engine/dice'
 import { purseFromGold } from '../engine/money'
 import { uid } from '../engine/uid'
 import { newCharacter, useStore } from '../store/store'
-import { Card, Choice, ChoiceAccordion, ChoiceGroup, Segmented } from '../components/ui'
+import { Card, Choice, ChoiceAccordion, ChoiceGroup, Segmented, SpellText } from '../components/ui'
 
 const STEPS = ['Identidade', 'Espécie', 'Antecedente', 'Classe', 'Atributos', 'Perícias', 'Magias', 'Equipamento'] as const
 
@@ -44,6 +47,8 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
   const [skillProfs, setSkillProfs] = useState<string[]>([])
   const [cantrips, setCantrips] = useState<string[]>([])
   const [spells, setSpells] = useState<string[]>([])
+  /** magias escolhidas nos grupos que não vêm da classe (espécie, talentos, estilo de luta) */
+  const [picks, setPicks] = useState<Record<string, string[]>>({})
   const [classEquipId, setClassEquipId] = useState('')
   const [bgEquipId, setBgEquipId] = useState('')
   const [extraGold, setExtraGold] = useState(0)
@@ -64,8 +69,11 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
 
   // Personagem provisório para consultar limites de magia e armas elegíveis à maestria
   const draft: Character = useMemo(
-    () => newCharacter({ classId, level: 1, speciesId, backgroundId, baseAbilities: scores, backgroundBonuses: bgBonuses }),
-    [classId, speciesId, backgroundId, scores, bgBonuses],
+    () => newCharacter({
+      classId, level: 1, speciesId, backgroundId, baseAbilities: scores, backgroundBonuses: bgBonuses,
+      speciesChoices, classChoices, originFeats, spellPicks: picks,
+    }),
+    [classId, speciesId, backgroundId, scores, bgBonuses, speciesChoices, classChoices, originFeats, picks],
   )
 
   // Maestria em Armas (Guerreiro 3 no nível 1; Bárbaro, Paladino, Patrulheiro e Ladino 2)
@@ -91,6 +99,24 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
   const availableCantrips = classSpells.filter((s) => s.level === 0)
   const availableSpells = classSpells.filter((s) => s.level >= 1 && s.level <= Math.max(1, maxLvl))
 
+  /*
+   * Tudo que concede magia fora da lista da classe (linhagem élfica, Iniciado em
+   * Magia, Estilo de Luta...) é escolhido aqui mesmo, no passo de Magias — e não
+   * espalhado pelos passos de espécie e de classe.
+   */
+  const gruposDeMagia = spellPickGroups(draft)
+  const magiasFixas = innateSpells(draft).filter((m) => !gruposDeMagia.some((g) => g.chosen.includes(m.spell.id)))
+  const gruposOk = gruposDeMagia.every((g) => !g.pending)
+
+  const togglePick = (grupoId: string, spellId: string, limite: number) => {
+    setPicks((atual) => {
+      const lista = atual[grupoId] ?? []
+      if (lista.includes(spellId)) return { ...atual, [grupoId]: lista.filter((x) => x !== spellId) }
+      if (lista.length >= limite) return atual
+      return { ...atual, [grupoId]: [...lista, spellId] }
+    })
+  }
+
   // Perícias já garantidas por antecedente, espécie ou escolhas de espécie
   const skillsFromChoices = speciesGroups
     .map((g) => g.options.find((o) => o.id === speciesChoices[g.id])?.grantsSkill)
@@ -115,7 +141,9 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
       case 3: return !!cls && classGroups.every((g) => !!classChoices[g.id]) && masteries.length === masteryNeeded
       case 4: return methodComplete()
       case 5: return escolhidasDaClasse === (cls?.skillCount ?? 0)
-      case 6: return cantrips.length === cantripsNeeded && (spellsNeeded === 0 || spells.length === spellsNeeded)
+      case 6: return cantrips.length === cantripsNeeded
+        && (spellsNeeded === 0 || spells.length === spellsNeeded)
+        && gruposOk
       default: return equipamentoOk
     }
   }
@@ -168,6 +196,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
       skillProfs: allSkills,
       spellsKnown: [...cantrips, ...spells],
       spellsPrepared: [...cantrips, ...spells],
+      spellPicks: picks,
       gold: ouroTotal,
       coins: purseFromGold(ouroTotal),
       inventory: inventarioInicial(),
@@ -686,7 +715,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
       {/* ---------- 6. MAGIAS ---------- */}
       {step === 6 && cls && (
         <>
-          {cls.caster === 'nenhum' ? (
+          {cls.caster === 'nenhum' && gruposDeMagia.length === 0 && magiasFixas.length === 0 ? (
             <Card title="Sem conjuração">
               <p className="muted">
                 {cls.name} não conjura magias no 1º nível. Algumas subclasses (como Cavaleiro Arcano e
@@ -695,8 +724,15 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
             </Card>
           ) : (
             <>
+              {cls.caster === 'nenhum' && (
+                <div className="banner">
+                  {cls.name} não conjura magias de classe, mas a sua espécie e os seus talentos
+                  concedem as magias abaixo.
+                </div>
+              )}
+
               {cantripsNeeded > 0 && (
-                <Card title={`Truques (${cantrips.length}/${cantripsNeeded})`}>
+                <Card title={`Truques de ${cls.name} (${cantrips.length}/${cantripsNeeded})`}>
                   <ChoiceAccordion>
                     {availableCantrips.map((s) => (
                       <Choice
@@ -705,7 +741,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
                         selected={cantrips.includes(s.id)}
                         title={s.name}
                         desc={`${s.school} · ${s.castingTime} · ${s.range}`}
-                        details={<p>{s.desc}</p>}
+                        details={<SpellText desc={s.desc} />}
                         onClick={() => toggle(cantrips, setCantrips, s.id, cantripsNeeded)}
                       />
                     ))}
@@ -727,8 +763,59 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
                         selected={spells.includes(s.id)}
                         title={`${s.name} (${s.level}º)`}
                         desc={`${s.school} · ${s.castingTime} · ${s.range} · ${s.duration}${s.concentration ? ' · Concentração' : ''}`}
-                        details={<p>{s.desc}</p>}
+                        details={<SpellText desc={s.desc} />}
                         onClick={() => toggle(spells, setSpells, s.id, spellsNeeded)}
+                      />
+                    ))}
+                  </ChoiceAccordion>
+                </Card>
+              )}
+
+              {/* Magias que não vêm da classe: escolhidas aqui, no mesmo passo. */}
+              {gruposDeMagia.map(({ pick, options, chosen }) => (
+                <Card key={pick.id} title={`${pick.source} — ${pick.spellLevel === 0 ? 'truques' : `${pick.spellLevel}º círculo`} (${chosen.length}/${pick.count})`}>
+                  <p className="muted tiny" style={{ marginBottom: 10 }}>
+                    Escolha {pick.count} {pick.spellLevel === 0 ? 'truque(s)' : `magia(s) de ${pick.spellLevel}º círculo`}
+                    {' '}da lista de {pick.fromClasses.map((c) => classById(c)?.name ?? c).join(', ')}
+                    {pick.schools ? ` (escolas de ${pick.schools.join(' ou ')})` : ''}.
+                    {pick.nota ? ` ${pick.nota}` : ''}
+                  </p>
+                  <ChoiceAccordion>
+                    {options.map((s) => (
+                      <Choice
+                        key={s.id}
+                        id={`${pick.id}-${s.id}`}
+                        selected={chosen.includes(s.id)}
+                        title={s.name}
+                        desc={`${s.school} · ${s.castingTime} · ${s.range}${s.concentration ? ' · Concentração' : ''}`}
+                        details={<SpellText desc={s.desc} />}
+                        onClick={() => togglePick(pick.id, s.id, pick.count)}
+                      />
+                    ))}
+                  </ChoiceAccordion>
+                  {chosen.length !== pick.count && (
+                    <div className="banner warn">Escolha exatamente {pick.count}.</div>
+                  )}
+                </Card>
+              ))}
+
+              {/* Magias fixas concedidas por espécie ou talento — nada a escolher. */}
+              {magiasFixas.length > 0 && (
+                <Card title="Magias já concedidas">
+                  <p className="muted tiny" style={{ marginBottom: 10 }}>
+                    Vêm prontas dos seus traços e talentos — você não precisa escolher nem gastar
+                    espaço do repertório da classe com elas.
+                  </p>
+                  <ChoiceAccordion>
+                    {magiasFixas.map((m) => (
+                      <Choice
+                        key={m.spell.id}
+                        id={`fixa-${m.spell.id}`}
+                        selected
+                        title={`${m.spell.name}${m.spell.level > 0 ? ` (${m.spell.level}º)` : ''}`}
+                        desc={`${m.source} · ${m.spell.school} · ${m.spell.castingTime}`}
+                        details={<SpellText desc={m.spell.desc} />}
+                        onClick={() => {}}
                       />
                     ))}
                   </ChoiceAccordion>

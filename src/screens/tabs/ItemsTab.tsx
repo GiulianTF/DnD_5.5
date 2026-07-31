@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import type { Character, CoinKey, Item } from '../../types'
-import { COINS, COIN_NAMES } from '../../types'
+import { useMemo, useState } from 'react'
+import type { Character, CoinKey, Item, ItemRarity } from '../../types'
+import { COINS, COIN_NAMES, RARITY_NAMES, RARITY_ORDER } from '../../types'
 import { ARMORS, GEAR, MAGIC_ITEMS, SHIELD, WEAPONS, itemById } from '../../data/equipment'
 import {
   armorClass, attunedCount, isProficientWithArmor, isProficientWithWeapon, resolveInventory,
@@ -14,14 +14,29 @@ const CATEGORIAS = [
   { id: 'arma', label: 'Armas', items: WEAPONS },
   { id: 'armadura', label: 'Armaduras e Escudos', items: [...ARMORS, SHIELD] },
   { id: 'equipamento', label: 'Equipamento', items: GEAR },
-  { id: 'magico', label: 'Itens Mágicos', items: MAGIC_ITEMS },
 ] as const
+
+/** Remove acentos para a busca do catálogo funcionar com ou sem eles. */
+const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 
 export function ItemsTab({ char }: { char: Character }) {
   const update = useStore((s) => s.updateCharacter)
   const [catalog, setCatalog] = useState(false)
   const [detail, setDetail] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
+  const [busca, setBusca] = useState('')
+
+  // O catálogo do Livro do Mestre tem centenas de itens: filtramos e agrupamos por raridade.
+  const magicosPorRaridade = useMemo(() => {
+    const termo = semAcento(busca.trim())
+    const filtrados = termo
+      ? MAGIC_ITEMS.filter((i) => semAcento(i.name).includes(termo)
+        || (i.magic?.categoryDetail && semAcento(i.magic.categoryDetail).includes(termo)))
+      : MAGIC_ITEMS
+    return RARITY_ORDER
+      .map((r) => ({ rarity: r, items: filtrados.filter((i) => i.magic?.rarity === r) }))
+      .filter((g) => g.items.length > 0)
+  }, [busca])
 
   const inv = resolveInventory(char)
   const ac = armorClass(char)
@@ -192,19 +207,82 @@ export function ItemsTab({ char }: { char: Character }) {
               </div>
             </details>
           ))}
+
+          {/* Itens mágicos do Livro do Mestre: do Comum ao Artefato. */}
+          <details open>
+            <summary>Itens Mágicos ({MAGIC_ITEMS.length})</summary>
+            <div style={{ marginTop: 8 }}>
+              <input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar item mágico pelo nome…"
+              />
+              <p className="muted tiny" style={{ margin: '8px 0' }}>
+                Catálogo completo do Livro do Mestre 2024, agrupado por raridade. Toque no nome
+                para ler a descrição inteira.
+              </p>
+              {magicosPorRaridade.length === 0 && (
+                <div className="muted tiny center" style={{ padding: 12 }}>Nenhum item com esse nome.</div>
+              )}
+              {magicosPorRaridade.map(({ rarity, items }) => (
+                <details key={rarity} open={!!busca.trim()}>
+                  <summary>{RARITY_NAMES[rarity]} ({items.length})</summary>
+                  <div style={{ marginTop: 8 }}>
+                    {items.map((item) => (
+                      <div className="list-item" key={item.id}>
+                        <div className="spread">
+                          <div style={{ flex: 1 }} onClick={() => setDetail(item.id)}>
+                            <strong style={{ fontSize: '.9rem' }}>{item.name}</strong>
+                            <div className="tiny muted">{describeItem(item)}</div>
+                          </div>
+                          <button className="sm primary" onClick={() => addItem(item.id)}>＋</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ))}
+            </div>
+          </details>
         </Sheet>
       )}
 
       {detail && (
         <Sheet title={itemById(detail)?.name ?? 'Item'} onClose={() => setDetail(null)}>
-          <p className="muted">{describeItem(itemById(detail)!)}</p>
-          {itemById(detail)?.magic?.desc && <div className="banner">{itemById(detail)!.magic!.desc}</div>}
-          <button className="primary" style={{ width: '100%' }} onClick={() => { addItem(detail); setDetail(null) }}>
+          <DetalheItem item={itemById(detail)!} />
+          <button className="primary" style={{ width: '100%', marginTop: 12 }} onClick={() => { addItem(detail); setDetail(null) }}>
             Adicionar à mochila
           </button>
         </Sheet>
       )}
     </div>
+  )
+}
+
+/** Ficha completa de um item: linha-resumo + texto integral do livro, quando houver. */
+function DetalheItem({ item }: { item: Item }) {
+  const m = item.magic
+  return (
+    <>
+      <div className="muted tiny" style={{ marginBottom: 12, lineHeight: 1.7 }}>
+        {m?.category && (
+          <>
+            <strong className="gold">{m.category}</strong>
+            {m.categoryDetail ? ` (${m.categoryDetail})` : ''}
+            {m.rarity ? ` · ${RARITY_NAMES[m.rarity]}` : ''}
+            {m.attunement && (
+              <><br /><strong>Requer sintonização</strong>{m.attunementBy ? ` ${m.attunementBy}` : ''}</>
+            )}
+            <br />
+          </>
+        )}
+        {!m && describeItem(item)}
+        {item.cost && <><br />Preço de tabela: {item.cost}</>}
+      </div>
+      {m?.text?.length
+        ? m.text.map((p, i) => <p className="spell-p" key={i}>{p}</p>)
+        : <p className="spell-p">{item.magic?.desc ?? item.desc ?? describeItem(item)}</p>}
+    </>
   )
 }
 
@@ -226,6 +304,13 @@ function describeItem(item: Item): string {
     const furt = a.stealthDisadv ? ' · Desvantagem em Furtividade' : ''
     return `CA ${a.baseAC} ${dex} · Armadura ${a.category}${req}${furt} · ${item.cost ?? ''}`
   }
-  if (item.magic?.desc) return item.magic.desc
+  if (item.magic) {
+    const m = item.magic
+    const partes = [m.category ?? 'Item Mágico']
+    if (m.rarity) partes.push(RARITY_NAMES[m.rarity])
+    if (m.attunement) partes.push(`Sintonização${m.attunementBy ? ` ${m.attunementBy}` : ''}`)
+    if (m.desc) partes.push(m.desc)
+    return partes.join(' · ')
+  }
   return [item.desc, item.cost].filter(Boolean).join(' · ') || 'Equipamento'
 }

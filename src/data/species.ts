@@ -1,4 +1,4 @@
-import type { AbilityKey, InnateSpell, OptionGroup, Species } from '../types'
+import type { AbilityKey, InnateSpell, OptionGroup, Species, SpellPick } from '../types'
 
 /**
  * No PHB 2024 as magias de linhagem usam a habilidade que o jogador escolher
@@ -13,6 +13,12 @@ const magia = (
   abilities: AbilityKey[] = INT_SAB_CAR,
   nota?: string,
 ): InnateSpell => ({ spellId, level, abilities, freeUses, nota })
+
+/** Atalho para declarar magias que a espécie deixa o jogador ESCOLHER. */
+const escolha = (
+  id: string, source: string, fromClasses: string[], spellLevel: number, count: number,
+  level = 1, freeUses: SpellPick['freeUses'] = 'vontade', nota?: string,
+): SpellPick => ({ id, source, level, count, fromClasses, spellLevel, abilities: INT_SAB_CAR, freeUses, nota })
 
 /** Ancestrais dracônicos: cada cor define o dano do Sopro e a resistência. */
 const ANCESTRAL_DRACONICO: OptionGroup = {
@@ -56,9 +62,9 @@ const LINHAGEM_ELFICA: OptionGroup = {
     {
       id: 'drow',
       name: 'Drow',
-      desc: 'Visão no escuro 36 m. Truque Globos de Luz. Nível 3: Fogo das Fadas. Nível 5: Escuridão (1×/descanso longo cada, ou gastando espaços).',
+      desc: 'Visão no escuro 36 m. Truque Luzes Dançantes. Nível 3: Fogo das Fadas. Nível 5: Escuridão (1×/descanso longo cada, ou gastando espaços).',
       innateSpells: [
-        magia('globos-de-luz', 1, 'vontade'),
+        magia('luzes-dancantes', 1, 'vontade'),
         magia('fogo-das-fadas', 3),
         magia('escuridao', 5),
       ],
@@ -66,21 +72,24 @@ const LINHAGEM_ELFICA: OptionGroup = {
     {
       id: 'alto-elfo',
       name: 'Alto Elfo',
-      desc: 'Um truque de Mago (trocável em cada descanso longo). Nível 3: Detectar Magia. Nível 5: Passo Nebuloso.',
+      desc: 'Um truque de Mago à sua escolha (trocável em cada descanso longo). Nível 3: Detectar Magia. Nível 5: Passo Nebuloso.',
       innateSpells: [
-        magia('prestidigitacao-magica', 1, 'vontade', INT_SAB_CAR, 'Você pode trocar este truque por qualquer outro truque de Mago a cada descanso longo.'),
         magia('detectar-magia', 3),
         magia('passo-nebuloso', 5),
+      ],
+      spellPicks: [
+        escolha('alto-elfo-truque', 'Alto Elfo', ['mago'], 0, 1, 1, 'vontade',
+          'Você pode trocar este truque por qualquer outro truque de Mago sempre que terminar um descanso longo.'),
       ],
     },
     {
       id: 'elfo-floresta',
       name: 'Elfo da Floresta',
-      desc: 'Deslocamento 10,5 m. Truque Druidismo. Nível 3: Passo Longo. Nível 5: Passar sem Rastro.',
+      desc: 'Deslocamento 10,5 m. Truque Arte Druídica. Nível 3: Passos Largos. Nível 5: Passo Sem Rastro.',
       innateSpells: [
-        magia('druidismo', 1, 'vontade'),
-        magia('passos-longos', 3),
-        magia('passar-sem-rastro', 5),
+        magia('arte-druidica', 1, 'vontade'),
+        magia('passos-largos', 3),
+        magia('passo-sem-rastro', 5),
       ],
     },
   ],
@@ -125,7 +134,7 @@ const LEGADO_INFERNAL: OptionGroup = {
     {
       id: 'abissal',
       name: 'Abissal',
-      desc: 'Resistência a dano de veneno. Truque Rajada de Veneno. Nível 3: Raio do Enfraquecimento. Nível 5: Cura de Ferimentos (Carisma, Inteligência ou Sabedoria como habilidade de conjuração).',
+      desc: 'Resistência a dano Venenoso. Truque Rajada de Veneno. Nível 3: Raio do Enfraquecimento. Nível 5: Curar Ferimentos.',
       innateSpells: [
         magia('rajada-de-veneno', 1, 'vontade'),
         magia('raio-do-enfraquecimento', 3),
@@ -135,20 +144,20 @@ const LEGADO_INFERNAL: OptionGroup = {
     {
       id: 'ctonico',
       name: 'Ctônico',
-      desc: 'Resistência a dano necrótico. Truque Toque Gélido. Nível 3: Falsa Vida. Nível 5: Raio Ardente.',
+      desc: 'Resistência a dano Necrótico. Truque Toque Necrótico. Nível 3: Vitalidade Vazia. Nível 5: Raio Ardente.',
       innateSpells: [
-        magia('toque-gelido', 1, 'vontade'),
-        magia('sopro-de-vida', 3),
+        magia('toque-necrotico', 1, 'vontade'),
+        magia('vitalidade-vazia', 3),
         magia('raio-ardente', 5),
       ],
     },
     {
       id: 'infernal',
       name: 'Infernal',
-      desc: 'Resistência a dano de fogo. Truque Rajada de Fogo. Nível 3: Repreensão Infernal. Nível 5: Escuridão.',
+      desc: 'Resistência a dano Ígneo. Truque Raio de Fogo. Nível 3: Repreensão Diabólica. Nível 5: Escuridão.',
       innateSpells: [
-        magia('rajada-de-fogo', 1, 'vontade'),
-        magia('repreensao-infernal', 3),
+        magia('raio-de-fogo', 1, 'vontade'),
+        magia('repreensao-diabolica', 3),
         magia('escuridao', 5),
       ],
     },
@@ -219,7 +228,7 @@ export const SPECIES: Species[] = [
       { name: 'Ancestral Feérico', desc: 'Vantagem em salvaguardas contra a condição Enfeitiçado.' },
       { name: 'Sentidos Aguçados', desc: 'Proficiência em Intuição, Percepção ou Sobrevivência.' },
       { name: 'Transe', desc: 'Você não precisa dormir; 4 horas de transe equivalem a um descanso longo.' },
-      { name: 'Linhagem Élfica', desc: 'Escolha: Drow (Globos de Luz; depois Escuridão e Fogo das Fadas, visão no escuro 36 m), Alto Elfo (truque de mago; depois Detectar Magia e Passo Nebuloso) ou Elfo da Floresta (Druidismo; depois Passo Longo e Passar sem Rastro, deslocamento 10,5 m).' },
+      { name: 'Linhagem Élfica', desc: 'Escolha: Drow (Luzes Dançantes; depois Fogo das Fadas e Escuridão, visão no escuro 36 m), Alto Elfo (um truque de Mago à sua escolha; depois Detectar Magia e Passo Nebuloso) ou Elfo da Floresta (Arte Druídica; depois Passos Largos e Passo Sem Rastro, deslocamento 10,5 m).' },
     ],
     choices: [LINHAGEM_ELFICA, SENTIDOS_AGUCADOS],
   },
@@ -290,7 +299,7 @@ export const SPECIES: Species[] = [
     speed: 9,
     darkvision: 18,
     traits: [
-      { name: 'Legado Infernal', desc: 'Escolha: Abissal (resistência a veneno; Rajada de Veneno, depois Raio do Enfraquecimento), Ctônico (resistência necrótica; Toque Gélido, depois Toque Vampírico) ou Infernal (resistência a fogo; Rajada de Fogo, depois Repreensão Infernal e Escuridão).' },
+      { name: 'Legado Infernal', desc: 'Escolha: Abissal (resistência a Venenoso; Rajada de Veneno, depois Raio do Enfraquecimento e Curar Ferimentos), Ctônico (resistência a Necrótico; Toque Necrótico, depois Vitalidade Vazia e Raio Ardente) ou Infernal (resistência a Ígneo; Raio de Fogo, depois Repreensão Diabólica e Escuridão).' },
       { name: 'Presença Sobrenatural', desc: 'Você conhece o truque Taumaturgia.' },
     ],
     innateSpells: [magia('taumaturgia', 1, 'vontade')],

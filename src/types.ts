@@ -42,6 +42,36 @@ export interface InnateSpell {
   nota?: string
 }
 
+// ---------- Magias que uma fonte fora da classe deixa ESCOLHER ----------
+/**
+ * Alguns traços e talentos não dão uma magia fixa: dão o direito de escolher
+ * ("um truque de Mago", "dois truques de Clérigo", "uma magia de 1º círculo de
+ * Ilusão ou Necromancia"). Todas essas escolhas acontecem no passo de Magias,
+ * junto com as magias da classe.
+ */
+export interface SpellPick {
+  /** identificador do grupo dentro da ficha */
+  id: string
+  /** de onde vem a escolha, exibido no cartão ("Alto Elfo", "Iniciado em Magia") */
+  source: string
+  /** nível de personagem a partir do qual a escolha aparece */
+  level: number
+  /** quantas magias escolher */
+  count: number
+  /** listas de classe das quais as magias podem sair */
+  fromClasses: string[]
+  /** círculo exato das magias oferecidas (0 = truques) */
+  spellLevel: number
+  /** escolas permitidas, quando a fonte restringe */
+  schools?: string[]
+  /** habilidades candidatas para a conjuração */
+  abilities: AbilityKey[]
+  /** como pode ser conjurada sem gastar espaço de magia */
+  freeUses?: InnateSpell['freeUses']
+  /** observação exibida junto da escolha */
+  nota?: string
+}
+
 // ---------- Escolhas (traços de espécie, características de classe) ----------
 export interface ChoiceOption {
   id: string
@@ -51,6 +81,8 @@ export interface ChoiceOption {
   grantsSkill?: string
   /** magias concedidas por esta opção (linhagens élficas, legado infernal...) */
   innateSpells?: InnateSpell[]
+  /** magias que esta opção deixa o jogador escolher */
+  spellPicks?: SpellPick[]
 }
 
 /** Um grupo de escolha ("Ancestral Dracônico", "Estilo de Luta", ...) com suas opções. */
@@ -94,6 +126,8 @@ export interface Species {
   extraOriginFeat?: boolean
   /** magias concedidas pelos traços da própria espécie (Aasimar: Luz; Tiefling: Taumaturgia) */
   innateSpells?: InnateSpell[]
+  /** magias que os traços da espécie deixam escolher */
+  spellPicks?: SpellPick[]
 }
 
 // ---------- Antecedentes ----------
@@ -119,6 +153,10 @@ export interface Feat {
   desc: string
   abilityIncrease?: AbilityKey[] // talentos gerais que dão +1 em uma das habilidades listadas
   repeatable?: boolean
+  /** magias fixas concedidas pelo talento (Tocado pelo Feérico: Passo Nebuloso) */
+  innateSpells?: InnateSpell[]
+  /** magias que o talento deixa o jogador escolher */
+  spellPicks?: SpellPick[]
 }
 
 // ---------- Classes ----------
@@ -196,7 +234,8 @@ export interface Spell {
   duration: string
   concentration?: boolean
   ritual?: boolean
-  desc: string
+  /** Descrição integral do Livro do Jogador, um item por parágrafo. */
+  desc: string[]
 }
 
 // ---------- Itens ----------
@@ -228,6 +267,26 @@ export interface ArmorData {
   stealthDisadv?: boolean
 }
 
+// ---------- Itens mágicos (Livro do Mestre 2024) ----------
+export type ItemRarity = 'comum' | 'incomum' | 'raro' | 'muito-raro' | 'lendario' | 'artefato' | 'varia'
+
+export const RARITY_ORDER: ItemRarity[] = ['comum', 'incomum', 'raro', 'muito-raro', 'lendario', 'artefato', 'varia']
+
+export const RARITY_NAMES: Record<ItemRarity, string> = {
+  'comum': 'Comum',
+  'incomum': 'Incomum',
+  'raro': 'Raro',
+  'muito-raro': 'Muito Raro',
+  'lendario': 'Lendário',
+  'artefato': 'Artefato',
+  'varia': 'Raridade Variável',
+}
+
+/** Categoria do item mágico, como aparece na linha de tipo do Livro do Mestre. */
+export type MagicCategory =
+  | 'Item Maravilhoso' | 'Anel' | 'Varinha' | 'Cajado' | 'Bastão' | 'Poção' | 'Pergaminho'
+  | 'Arma' | 'Armadura' | 'Munição'
+
 export interface MagicEffects {
   /** bônus em jogadas de ataque e dano (armas mágicas) */
   attackBonus?: number
@@ -240,7 +299,18 @@ export interface MagicEffects {
   /** braçadeiras de defesa: só funciona sem armadura/escudo */
   requiresNoArmor?: boolean
   attunement?: boolean
+  /** restrição de sintonização ("por um conjurador", "por um Bruxo") */
+  attunementBy?: string
+  /** raridade do Livro do Mestre */
+  rarity?: ItemRarity
+  /** categoria do Livro do Mestre ("Item Maravilhoso", "Anel", ...) */
+  category?: MagicCategory
+  /** detalhamento da categoria: "Qualquer Armadura Média ou Pesada", "Espada Longa"... */
+  categoryDetail?: string
+  /** resumo de uma linha, usado nas listas */
   desc?: string
+  /** descrição integral do Livro do Mestre, um item por parágrafo */
+  text?: string[]
 }
 
 export interface Item {
@@ -337,6 +407,11 @@ export interface Character {
   coins: CoinPurse
   spellsKnown: string[]
   spellsPrepared: string[]
+  /**
+   * Magias escolhidas em cada grupo concedido fora da classe (espécie, talentos,
+   * estilos de luta): { 'alto-elfo-truque': ['prestidigitacao-arcana'] }.
+   */
+  spellPicks: Record<string, string[]>
   slotsSpent: Record<number, number>
   pactSlotsSpent: number
   /** usos gastos de recursos limitados, por id do recurso */

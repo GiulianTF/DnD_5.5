@@ -161,6 +161,29 @@ export function ChoiceGroup({ group, value, onChange, aviso = true }: {
   )
 }
 
+/**
+ * Descrição integral de uma magia (um parágrafo por item, exatamente como no
+ * Livro do Jogador). Os títulos padronizados do livro saem destacados.
+ */
+const TITULOS_DE_MAGIA = /^(Usando um Espaço de Magia de Círculo Superior\.|Aprimoramento de Truque\.)\s*/
+
+export function SpellText({ desc }: { desc: string[] }) {
+  return (
+    <>
+      {desc.map((paragrafo, i) => {
+        const titulo = paragrafo.match(TITULOS_DE_MAGIA)
+        return (
+          <p className="spell-p" key={i}>
+            {titulo
+              ? <><strong className="gold">{titulo[1]}</strong> {paragrafo.slice(titulo[0].length)}</>
+              : paragrafo}
+          </p>
+        )
+      })}
+    </>
+  )
+}
+
 export function Stepper({ value, onChange, min = 0, max = 99, label }: {
   value: number
   onChange: (v: number) => void
