@@ -331,3 +331,120 @@ hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
 
 details summary { cursor: pointer; padding: 6px 0; font-size: .88rem; }
 details[open] summary { color: var(--gold); }
+
+/* ---------- Tela de login ---------- */
+.login {
+  position: fixed;
+  inset: 0;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px calc(24px + var(--safe-bottom));
+}
+.dungeon-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  display: block;
+}
+.login-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.brand { text-align: center; margin-bottom: 18px; }
+.brand-icon { font-size: 2.6rem; filter: drop-shadow(0 2px 10px rgba(224,178,92,.35)); }
+.brand h1 {
+  font-size: 2rem;
+  color: var(--gold);
+  letter-spacing: .02em;
+  text-shadow: 0 2px 16px rgba(0,0,0,.8);
+  margin-top: 2px;
+}
+.brand-sub { font-size: .8rem; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+
+.login-card {
+  width: 100%;
+  background: rgba(30, 24, 18, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.55);
+}
+.login-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+.login-tabs button {
+  flex: 1;
+  min-height: 40px;
+  background: transparent;
+  border-color: var(--border);
+  color: var(--muted);
+  border-radius: 9px;
+}
+.login-tabs button.on { background: var(--card-2); color: var(--text); border-color: var(--gold); }
+
+.oauth-sep { display: flex; align-items: center; gap: 10px; margin: 16px 0; color: var(--muted); font-size: .78rem; }
+.oauth-sep::before, .oauth-sep::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.google-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #fff;
+  color: #3c4043;
+  border: 1px solid #dadce0;
+  font-weight: 600;
+  position: relative;
+}
+.google-btn .soon {
+  position: absolute;
+  right: 10px;
+  font-size: .62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: #fff;
+  background: var(--red);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+.skip {
+  width: 100%;
+  margin-top: 10px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  text-decoration: underline;
+  min-height: 40px;
+}
+.skip:hover { color: var(--text); }
+
+.version { margin-top: 16px; font-size: .72rem; color: var(--muted); opacity: .8; text-shadow: 0 1px 6px rgba(0,0,0,.8); }
+
+/* ---------- Splash ---------- */
+.splash {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+.splash-icon { font-size: 3rem; animation: splash-pulse 1.1s ease-in-out infinite; }
+@keyframes splash-pulse {
+  0%, 100% { transform: scale(1); opacity: .7; }
+  50% { transform: scale(1.12); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .splash-icon { animation: none; }
+}

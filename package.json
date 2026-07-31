@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "node scripts/run-tests.cjs",
     "test:regras": "node scripts/run-tests.cjs regras",
-    "test:render": "node scripts/run-tests.cjs render"
+    "test:render": "node scripts/run-tests.cjs render",
+    "gerar-prod": "npm test && npm run build && vercel --prod --yes"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.47.10",
