@@ -1,6 +1,31 @@
-import type { DndClass, ClassFeature, Subclass } from '../types'
+import type { DndClass, ClassFeature, EquipmentGrant, EquipmentOption, OptionGroup, Subclass } from '../types'
+import { FIGHTING_STYLES } from './feats'
 
 const mod = (v: number) => Math.floor((v - 10) / 2)
+
+// ---------- Equipamento inicial (PHB 2024: pacote da classe ou só moedas) ----------
+const eq = (label: string, items: EquipmentGrant[], gold: number, id = 'A'): EquipmentOption =>
+  ({ id, label, items, gold })
+const soOuro = (gold: number, id = 'B'): EquipmentOption =>
+  ({ id, label: `${gold} PO (compre seu próprio equipamento)`, items: [], gold })
+
+// ---------- Estilo de Luta ----------
+/** Estilos disponíveis para todas as classes marciais. */
+const ESTILOS_BASE = FIGHTING_STYLES.filter(
+  (f) => f.id !== 'estilo-combatente-abencoado' && f.id !== 'estilo-guerreiro-druidico',
+)
+
+const estiloDeLuta = (level: number, extraIds: string[] = []): OptionGroup => ({
+  id: 'estilo-de-luta',
+  name: 'Estilo de Luta',
+  level,
+  desc: 'Escolha um talento de Estilo de Luta. Ele fica ativo permanentemente e aparece na sua ficha.',
+  options: [...ESTILOS_BASE, ...FIGHTING_STYLES.filter((f) => extraIds.includes(f.id))].map((f) => ({
+    id: f.id,
+    name: f.name,
+    desc: f.desc,
+  })),
+})
 
 // Magias preparadas por nível (PHB 2024)
 const PREP_FULL = [4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 16, 17, 17, 18, 18, 19, 20, 21, 22]
@@ -50,6 +75,12 @@ export const CLASSES: DndClass[] = [
     skillCount: 2,
     caster: 'nenhum',
     startingEquipment: 'Machado grande, 4 machadinhas, pacote de explorador e 15 PO',
+    equipmentOptions: [
+      eq('Machado grande, 4 machadinhas, pacote de explorador e 15 PO', [
+        { itemId: 'machado-grande' }, { itemId: 'machadinha', qty: 4 }, { itemId: 'pacote-explorador' },
+      ], 15),
+      soOuro(75),
+    ],
     features: [
       { level: 1, name: 'Fúria', desc: 'Como ação Bônus, entre em Fúria (10 min): vantagem em testes e salvaguardas de FOR, bônus de dano com FOR (+2), resistência a dano Cortante, Perfurante e de Concussão. Não funciona com armadura pesada.' },
       { level: 1, name: 'Defesa sem Armadura', desc: 'Sem armadura, sua CA = 10 + mod. DES + mod. CON (pode usar escudo).' },
@@ -126,6 +157,12 @@ export const CLASSES: DndClass[] = [
     preparedByLevel: PREP_FULL,
     cantripsByLevel: CANTRIPS_2_3_4,
     startingEquipment: 'Armadura de couro, 2 adagas, instrumento musical, pacote de artista e 19 PO',
+    equipmentOptions: [
+      eq('Armadura de couro, 2 adagas, instrumento musical, pacote de artista e 19 PO', [
+        { itemId: 'couro' }, { itemId: 'adaga', qty: 2 }, { itemId: 'instrumento-musical' }, { itemId: 'pacote-artista' },
+      ], 19),
+      soOuro(90),
+    ],
     features: [
       { level: 1, name: 'Inspiração de Bardo', desc: 'Bônus: dê um d6 de Inspiração a uma criatura a até 18 m; ela pode somar a um Teste D20 falho. Dado aumenta: d8 (5º), d10 (10º), d12 (15º).' },
       { level: 1, name: 'Conjuração', desc: 'Você conjura magias de Bardo usando Carisma.' },
@@ -193,6 +230,35 @@ export const CLASSES: DndClass[] = [
     preparedByLevel: PREP_FULL,
     cantripsByLevel: CANTRIPS_3_4_5,
     startingEquipment: 'Cota de malha (camisão), escudo, maça, símbolo sagrado, pacote de sacerdote e 7 PO',
+    equipmentOptions: [
+      eq('Camisão de malha, escudo, maça, símbolo sagrado, pacote de sacerdote e 7 PO', [
+        { itemId: 'camisao-de-malha' }, { itemId: 'escudo' }, { itemId: 'maca' },
+        { itemId: 'simbolo-sagrado' }, { itemId: 'pacote-sacerdote' },
+      ], 7),
+      soOuro(110),
+    ],
+    choices: [
+      {
+        id: 'ordem-divina',
+        name: 'Ordem Divina',
+        level: 1,
+        desc: 'Escolha o papel que você cumpre no serviço divino.',
+        options: [
+          { id: 'protetor', name: 'Protetor', desc: 'Você ganha proficiência com armas marciais e com armadura pesada.' },
+          { id: 'taumaturgo', name: 'Taumaturgo', desc: 'Você conhece mais um truque de Clérigo e soma seu modificador de Sabedoria (mín. +1) aos testes de Arcanismo e Religião.' },
+        ],
+      },
+      {
+        id: 'golpes-abencoados',
+        name: 'Golpes Abençoados',
+        level: 7,
+        desc: 'Escolha como a energia divina reforça seus ataques (permanente).',
+        options: [
+          { id: 'conjurador-divino', name: 'Conjurador Divino', desc: 'Seus truques de Clérigo que causam dano rolam um dado de dano adicional (dois no nível 14).' },
+          { id: 'golpes-potentes', name: 'Golpes Potentes', desc: '1×/turno, ao acertar um ataque com arma, cause +1d8 de dano radiante (2d8 no nível 14).' },
+        ],
+      },
+    ],
     features: [
       { level: 1, name: 'Conjuração', desc: 'Você conjura magias de Clérigo usando Sabedoria.' },
       { level: 1, name: 'Ordem Divina', desc: 'Escolha: Protetor (armas marciais e armadura pesada) ou Taumaturgo (+1 truque e bônus em Arcanismo/Religião).' },
@@ -259,6 +325,25 @@ export const CLASSES: DndClass[] = [
     preparedByLevel: PREP_FULL,
     cantripsByLevel: CANTRIPS_2_3_4,
     startingEquipment: 'Armadura de couro, escudo, foice, foco druídico, pacote de explorador e 9 PO',
+    equipmentOptions: [
+      eq('Armadura de couro, escudo, foice curta, foco druídico, pacote de explorador e 9 PO', [
+        { itemId: 'couro' }, { itemId: 'escudo' }, { itemId: 'foice-curta' },
+        { itemId: 'foco-druidico' }, { itemId: 'pacote-explorador' },
+      ], 9),
+      soOuro(50),
+    ],
+    choices: [
+      {
+        id: 'ordem-primal',
+        name: 'Ordem Primal',
+        level: 1,
+        desc: 'Escolha a sua vocação druídica.',
+        options: [
+          { id: 'guardiao', name: 'Guardião', desc: 'Você ganha proficiência com armas marciais e com armadura média.' },
+          { id: 'mago-primal', name: 'Mago Primal', desc: 'Você conhece mais um truque de Druida e soma seu modificador de Sabedoria (mín. +1) aos testes de Arcanismo e Natureza.' },
+        ],
+      },
+    ],
     features: [
       { level: 1, name: 'Conjuração', desc: 'Você conjura magias de Druida usando Sabedoria.' },
       { level: 1, name: 'Druidismo', desc: 'Você conhece o truque Druidismo e a língua Druídica.' },
@@ -328,6 +413,18 @@ export const CLASSES: DndClass[] = [
     skillCount: 2,
     caster: 'nenhum',
     startingEquipment: 'Cota de malha, espada grande, mangual, 8 azagaias, pacote de masmorra e 4 PO',
+    equipmentOptions: [
+      eq('Cota de malha, espada grande, mangual, 8 azagaias, pacote de masmorra e 4 PO', [
+        { itemId: 'cota-de-malha' }, { itemId: 'espada-grande' }, { itemId: 'mangual' },
+        { itemId: 'azagaia', qty: 8 }, { itemId: 'pacote-masmorra' },
+      ], 4),
+      eq('Couro batido, cimitarra, espada curta, arco longo, aljava com 20 flechas, pacote de masmorra e 11 PO', [
+        { itemId: 'couro-batido' }, { itemId: 'cimitarra' }, { itemId: 'espada-curta' },
+        { itemId: 'arco-longo' }, { itemId: 'aljava' }, { itemId: 'pacote-masmorra' },
+      ], 11, 'B'),
+      soOuro(155, 'C'),
+    ],
+    choices: [estiloDeLuta(1)],
     features: [
       { level: 1, name: 'Estilo de Luta', desc: 'Escolha um talento de Estilo de Luta (ex.: Defesa +1 CA, Duelismo +2 dano, Arquearia +2 ataque à distância, Armas Grandes rerrolar 1-2 no dano).' },
       { level: 1, name: 'Retomar o Fôlego', desc: 'Bônus: recupere 1d10 + nível de Guerreiro PV. Recupere 1 uso em descanso curto, todos no longo.' },
@@ -407,6 +504,12 @@ export const CLASSES: DndClass[] = [
     skillCount: 2,
     caster: 'nenhum',
     startingEquipment: 'Lança, 5 adagas, ferramentas de artesão ou instrumento, pacote de explorador e 11 PO',
+    equipmentOptions: [
+      eq('Lança, 5 adagas, ferramentas de artesão (ou instrumento musical), pacote de explorador e 11 PO', [
+        { itemId: 'lanca' }, { itemId: 'adaga', qty: 5 }, { itemId: 'ferramentas-artesao' }, { itemId: 'pacote-explorador' },
+      ], 11),
+      soOuro(50),
+    ],
     features: [
       { level: 1, name: 'Artes Marciais', desc: 'Ataques desarmados/armas de monge usam d6 (aumenta com o nível) e podem usar DES; ataque desarmado como ação Bônus.' },
       { level: 1, name: 'Defesa sem Armadura', desc: 'Sem armadura nem escudo, CA = 10 + mod. DES + mod. SAB.' },
@@ -482,6 +585,14 @@ export const CLASSES: DndClass[] = [
     spellAbility: 'car',
     preparedByLevel: PREP_HALF,
     startingEquipment: 'Cota de malha, escudo, espada longa, 6 azagaias, símbolo sagrado, pacote de sacerdote e 9 PO',
+    equipmentOptions: [
+      eq('Cota de malha, escudo, espada longa, 6 azagaias, símbolo sagrado, pacote de sacerdote e 9 PO', [
+        { itemId: 'cota-de-malha' }, { itemId: 'escudo' }, { itemId: 'espada-longa' },
+        { itemId: 'azagaia', qty: 6 }, { itemId: 'simbolo-sagrado' }, { itemId: 'pacote-sacerdote' },
+      ], 9),
+      soOuro(150),
+    ],
+    choices: [estiloDeLuta(2, ['estilo-combatente-abencoado'])],
     features: [
       { level: 1, name: 'Impor as Mãos', desc: 'Reserva de cura = 5 × nível de Paladino. Bônus: cure PV ou remova a condição Envenenado (custo 5).' },
       { level: 1, name: 'Conjuração', desc: 'Você conjura magias de Paladino usando Carisma.' },
@@ -555,6 +666,14 @@ export const CLASSES: DndClass[] = [
     spellAbility: 'sab',
     preparedByLevel: PREP_HALF,
     startingEquipment: 'Armadura de couro batido, cimitarra, espada curta, arco longo com 20 flechas, pacote de explorador e 7 PO',
+    equipmentOptions: [
+      eq('Couro batido, cimitarra, espada curta, arco longo, aljava com 20 flechas, pacote de explorador e 7 PO', [
+        { itemId: 'couro-batido' }, { itemId: 'cimitarra' }, { itemId: 'espada-curta' },
+        { itemId: 'arco-longo' }, { itemId: 'aljava' }, { itemId: 'pacote-explorador' },
+      ], 7),
+      soOuro(150),
+    ],
+    choices: [estiloDeLuta(2, ['estilo-guerreiro-druidico'])],
     features: [
       { level: 1, name: 'Conjuração', desc: 'Você conjura magias de Patrulheiro usando Sabedoria.' },
       { level: 1, name: 'Inimigo Favorito', desc: 'Marca do Caçador sempre preparada; conjure sem gastar espaço (usos aumentam com o nível).' },
@@ -626,6 +745,13 @@ export const CLASSES: DndClass[] = [
     skillCount: 4,
     caster: 'nenhum',
     startingEquipment: 'Armadura de couro, 2 adagas, espada curta, arco curto com 20 flechas, ferramentas de ladrão, pacote de assaltante e 8 PO',
+    equipmentOptions: [
+      eq('Armadura de couro, 2 adagas, espada curta, arco curto, aljava com 20 flechas, ferramentas de ladrão, pacote de assaltante e 8 PO', [
+        { itemId: 'couro' }, { itemId: 'adaga', qty: 2 }, { itemId: 'espada-curta' }, { itemId: 'arco-curto' },
+        { itemId: 'aljava' }, { itemId: 'ferramentas-de-ladrao' }, { itemId: 'pacote-assaltante' },
+      ], 8),
+      soOuro(100),
+    ],
     features: [
       { level: 1, name: 'Ataque Furtivo', desc: '1×/turno, +1d6 de dano (aumenta a cada 2 níveis) com arma de Acuidade ou à distância se tiver vantagem ou um aliado adjacente ao alvo.' },
       { level: 1, name: 'Perícia Aprimorada', desc: 'Duas perícias com bônus de proficiência dobrado (mais 2 no nível 6).' },
@@ -705,6 +831,12 @@ export const CLASSES: DndClass[] = [
     preparedByLevel: PREP_SORC,
     cantripsByLevel: CANTRIPS_4_5_6,
     startingEquipment: '2 adagas, foco arcano (cristal), pacote de masmorra e 28 PO',
+    equipmentOptions: [
+      eq('Lança, 2 adagas, foco arcano (cristal), pacote de masmorra e 28 PO', [
+        { itemId: 'lanca' }, { itemId: 'adaga', qty: 2 }, { itemId: 'foco-arcano' }, { itemId: 'pacote-masmorra' },
+      ], 28),
+      soOuro(50),
+    ],
     features: [
       { level: 1, name: 'Conjuração', desc: 'Você conjura magias de Feiticeiro usando Carisma.' },
       { level: 1, name: 'Feitiçaria Inata', desc: 'Bônus (2×/descanso longo): por 1 minuto, +1 na CD de magias e vantagem nos ataques de magia.' },
@@ -774,6 +906,13 @@ export const CLASSES: DndClass[] = [
     preparedByLevel: PREP_WARLOCK,
     cantripsByLevel: CANTRIPS_2_3_4,
     startingEquipment: 'Armadura de couro, foice, 2 adagas, foco arcano (orbe), livro de conhecimento, pacote de estudioso e 15 PO',
+    equipmentOptions: [
+      eq('Armadura de couro, foice curta, 2 adagas, foco arcano (orbe), livro de ocultismo, pacote de estudioso e 15 PO', [
+        { itemId: 'couro' }, { itemId: 'foice-curta' }, { itemId: 'adaga', qty: 2 },
+        { itemId: 'foco-arcano' }, { itemId: 'livro' }, { itemId: 'pacote-estudioso' },
+      ], 15),
+      soOuro(100),
+    ],
     features: [
       { level: 1, name: 'Conjuração de Pacto', desc: 'Espaços de Pacto: poucos, mas sempre no nível máximo e recuperados em descanso curto.' },
       { level: 1, name: 'Invocações Místicas', desc: 'Fragmentos de poder (1 no nível 1, até 10 no 20): Explosão Agonizante, Visão Diabólica, Pacto da Lâmina/da Corrente/do Tomo etc.' },
@@ -843,6 +982,13 @@ export const CLASSES: DndClass[] = [
     preparedByLevel: PREP_WIZARD,
     cantripsByLevel: CANTRIPS_3_4_5,
     startingEquipment: '2 adagas, foco arcano (bastão), robe, grimório, pacote de estudioso e 5 PO',
+    equipmentOptions: [
+      eq('2 adagas, foco arcano (bastão), robe, grimório, pacote de estudioso e 5 PO', [
+        { itemId: 'adaga', qty: 2 }, { itemId: 'foco-arcano' }, { itemId: 'robe' },
+        { itemId: 'grimorio' }, { itemId: 'pacote-estudioso' },
+      ], 5),
+      soOuro(55),
+    ],
     features: [
       { level: 1, name: 'Conjuração', desc: 'Você conjura magias de Mago usando Inteligência; seu grimório guarda suas magias (6 iniciais, +2 por nível).' },
       { level: 1, name: 'Ritualista', desc: 'Conjure magias com a marcação Ritual do grimório sem prepará-las.' },

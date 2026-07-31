@@ -1,16 +1,20 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import type { RollEntry } from '../types'
 import { useStore } from '../store/store'
 import { roll, type Advantage } from '../engine/dice'
 import { Sheet, Segmented } from './ui'
 
 const DICE = [4, 6, 8, 10, 12, 20, 100]
 
+/** Quanto tempo o resultado flutuante fica na tela. */
+const TOAST_MS = 7000
+
 export function useRoller() {
   const pushRoll = useStore((s) => s.pushRoll)
   return pushRoll
 }
 
-export function RollResult({ entry }: { entry: ReturnType<typeof roll> }) {
+export function RollResult({ entry }: { entry: RollEntry }) {
   return (
     <div className="roll-result">
       <div className="muted tiny">{entry.label}</div>
@@ -21,6 +25,39 @@ export function RollResult({ entry }: { entry: ReturnType<typeof roll> }) {
       </div>
       {entry.crit === 'critico' && <div className="gold" style={{ fontWeight: 700, marginTop: 4 }}>⚔ ACERTO CRÍTICO! (20 natural)</div>}
       {entry.crit === 'falha' && <div style={{ color: 'var(--red)', fontWeight: 700, marginTop: 4 }}>💀 FALHA CRÍTICA! (1 natural)</div>}
+    </div>
+  )
+}
+
+/**
+ * Mostra a última rolagem sobre a tela, venha ela de onde vier (perícia, ataque,
+ * salvaguarda ou do rolador). Antes o resultado só existia no topo da aba e passava
+ * despercebido quando a página estava rolada para baixo.
+ */
+export function RollToast({ oculto = false }: { oculto?: boolean }) {
+  const ultima = useStore((s) => s.rollLog[0]) as RollEntry | undefined
+  const [dispensada, setDispensada] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!ultima) return
+    const t = setTimeout(() => setDispensada(ultima.id), TOAST_MS)
+    return () => clearTimeout(t)
+  }, [ultima?.id])
+
+  if (oculto || !ultima || dispensada === ultima.id) return null
+
+  return (
+    <div className="roll-toast" role="status" aria-live="polite" onClick={() => setDispensada(ultima.id)}>
+      <div className="roll-toast-info">
+        <div className="label">{ultima.label}</div>
+        <div className="muted tiny">
+          {ultima.formula} → [{ultima.rolls.join(', ')}]
+          {ultima.discarded?.length ? ` (descartado: ${ultima.discarded.join(', ')})` : ''}
+        </div>
+        {ultima.crit === 'critico' && <div className="gold tiny" style={{ fontWeight: 700 }}>⚔ ACERTO CRÍTICO!</div>}
+        {ultima.crit === 'falha' && <div className="tiny" style={{ color: 'var(--red)', fontWeight: 700 }}>💀 FALHA CRÍTICA!</div>}
+      </div>
+      <div className={`roll-toast-total ${ultima.crit ?? ''}`} key={ultima.id}>{ultima.total}</div>
     </div>
   )
 }

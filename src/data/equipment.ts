@@ -108,6 +108,42 @@ export const GEAR: Item[] = [
   { id: 'algemas', name: 'Algemas', kind: 'equipamento', cost: '2 PO', weight: 3 },
   { id: 'pe-de-cabra', name: 'Pé de Cabra', kind: 'equipamento', cost: '2 PO', weight: 2.5 },
   { id: 'kit-herbalismo', name: 'Kit de Herbalismo', kind: 'equipamento', cost: '5 PO', weight: 1.5 },
+
+  // ---------- Pacotes de equipamento (PHB 2024) ----------
+  { id: 'pacote-explorador', name: 'Pacote de Explorador', kind: 'equipamento', cost: '10 PO', weight: 25, desc: 'Mochila, saco de dormir, 2 sacolas, caixa de fósforos, 10 tochas, 10 rações, cantil e 15 m de corda.' },
+  { id: 'pacote-masmorra', name: 'Pacote de Masmorra', kind: 'equipamento', cost: '12 PO', weight: 27.5, desc: 'Mochila, pé de cabra, martelo, 10 estacas, lampião, 2 frascos de óleo, 10 rações, caixa de fósforos, cantil e 15 m de corda.' },
+  { id: 'pacote-artista', name: 'Pacote de Artista', kind: 'equipamento', cost: '40 PO', weight: 19, desc: 'Mochila, saco de dormir, 2 fantasias, 5 velas, 5 rações, cantil, kit de disfarce.' },
+  { id: 'pacote-sacerdote', name: 'Pacote de Sacerdote', kind: 'equipamento', cost: '33 PO', weight: 12.5, desc: 'Mochila, manta, 10 velas, caixa de fósforos, kit de curandeiro, água benta, 2 potes de incenso, vestes, 7 rações e cantil.' },
+  { id: 'pacote-assaltante', name: 'Pacote de Assaltante', kind: 'equipamento', cost: '16 PO', weight: 21.5, desc: 'Mochila, saco de dormir, sino, 5 velas, pé de cabra, martelo, 10 estacas, capuz de lampião, 2 frascos de óleo, 5 rações, cantil e 15 m de corda.' },
+  { id: 'pacote-estudioso', name: 'Pacote de Estudioso', kind: 'equipamento', cost: '40 PO', weight: 5, desc: 'Mochila, livro em branco, suprimentos de calígrafo, lampião, 3 frascos de óleo e caixa de fósforos.' },
+
+  // ---------- Ferramentas ----------
+  { id: 'ferramentas-artesao', name: 'Ferramentas de Artesão (à escolha)', kind: 'equipamento', cost: '20 PO', weight: 5 },
+  { id: 'ferramentas-carpinteiro', name: 'Ferramentas de Carpinteiro', kind: 'equipamento', cost: '8 PO', weight: 3 },
+  { id: 'ferramentas-cartografo', name: 'Ferramentas de Cartógrafo', kind: 'equipamento', cost: '15 PO', weight: 3 },
+  { id: 'ferramentas-navegador', name: 'Ferramentas de Navegador', kind: 'equipamento', cost: '25 PO', weight: 1 },
+  { id: 'suprimentos-caligrafo', name: 'Suprimentos de Calígrafo', kind: 'equipamento', cost: '10 PO', weight: 2.5 },
+  { id: 'kit-falsificacao', name: 'Kit de Falsificação', kind: 'equipamento', cost: '15 PO', weight: 2.5 },
+  { id: 'kit-disfarce', name: 'Kit de Disfarce', kind: 'equipamento', cost: '25 PO', weight: 1.5 },
+  { id: 'conjunto-de-jogo', name: 'Conjunto de Jogo (à escolha)', kind: 'equipamento', cost: '1 PO', weight: 0 },
+  { id: 'instrumento-musical', name: 'Instrumento Musical (à escolha)', kind: 'equipamento', cost: '30 PO', weight: 1.5 },
+
+  // ---------- Vestuário e itens diversos ----------
+  { id: 'roupas-viajante', name: 'Roupas de Viajante', kind: 'equipamento', cost: '2 PO', weight: 2 },
+  { id: 'roupas-finas', name: 'Roupas Finas', kind: 'equipamento', cost: '15 PO', weight: 3 },
+  { id: 'robe', name: 'Robe', kind: 'equipamento', cost: '1 PO', weight: 2 },
+  { id: 'fantasia', name: 'Fantasia', kind: 'equipamento', cost: '5 PO', weight: 2 },
+  { id: 'sacola', name: 'Sacola', kind: 'equipamento', cost: '5 PC', weight: 0.25 },
+  { id: 'livro', name: 'Livro', kind: 'equipamento', cost: '25 PO', weight: 2.5, desc: 'Um livro sobre um tema à sua escolha (história, filosofia, ocultismo...).' },
+  { id: 'livro-de-preces', name: 'Livro de Preces', kind: 'equipamento', cost: '25 PO', weight: 2.5 },
+  { id: 'pergaminho', name: 'Pergaminho (folha)', kind: 'equipamento', cost: '1 PP', weight: 0 },
+  { id: 'espelho', name: 'Espelho de Mão', kind: 'equipamento', cost: '5 PO', weight: 0.25 },
+  { id: 'perfume', name: 'Perfume', kind: 'equipamento', cost: '5 PO', weight: 0 },
+  { id: 'frasco-de-oleo', name: 'Frasco de Óleo', kind: 'equipamento', cost: '1 PP', weight: 0.5 },
+  { id: 'panela-de-ferro', name: 'Panela de Ferro', kind: 'equipamento', cost: '2 PO', weight: 5 },
+  { id: 'pa', name: 'Pá', kind: 'equipamento', cost: '2 PO', weight: 2.5 },
+  { id: 'tenda', name: 'Tenda', kind: 'equipamento', cost: '2 PO', weight: 10 },
+  { id: 'apito', name: 'Apito', kind: 'equipamento', cost: '5 PC', weight: 0 },
 ]
 
 export const MAGIC_ITEMS: Item[] = [

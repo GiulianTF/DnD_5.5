@@ -1,4 +1,93 @@
-import type { Species } from '../types'
+import type { OptionGroup, Species } from '../types'
+
+/** Ancestrais dracônicos: cada cor define o dano do Sopro e a resistência. */
+const ANCESTRAL_DRACONICO: OptionGroup = {
+  id: 'ancestral-draconico',
+  name: 'Ancestral Dracônico',
+  desc: 'Escolha a cor do seu ancestral. Ela define o tipo de dano do seu Sopro Dracônico e a sua resistência.',
+  options: [
+    { id: 'negro', name: 'Dragão Negro', desc: 'Dano e resistência: Ácido. Sopro em linha.' },
+    { id: 'cobre', name: 'Dragão de Cobre', desc: 'Dano e resistência: Ácido. Sopro em linha.' },
+    { id: 'azul', name: 'Dragão Azul', desc: 'Dano e resistência: Elétrico. Sopro em linha.' },
+    { id: 'bronze', name: 'Dragão de Bronze', desc: 'Dano e resistência: Elétrico. Sopro em linha.' },
+    { id: 'latao', name: 'Dragão de Latão', desc: 'Dano e resistência: Fogo. Sopro em linha.' },
+    { id: 'ouro', name: 'Dragão de Ouro', desc: 'Dano e resistência: Fogo. Sopro em cone.' },
+    { id: 'vermelho', name: 'Dragão Vermelho', desc: 'Dano e resistência: Fogo. Sopro em cone.' },
+    { id: 'verde', name: 'Dragão Verde', desc: 'Dano e resistência: Veneno. Sopro em cone.' },
+    { id: 'prata', name: 'Dragão de Prata', desc: 'Dano e resistência: Frio. Sopro em cone.' },
+    { id: 'branco', name: 'Dragão Branco', desc: 'Dano e resistência: Frio. Sopro em cone.' },
+  ],
+}
+
+/** Dádivas de Gigante do Golias. */
+const DADIVA_DE_GIGANTE: OptionGroup = {
+  id: 'dadiva-de-gigante',
+  name: 'Ancestral Gigante (Dádiva)',
+  desc: 'Escolha a dádiva do seu ancestral gigante. Usos = bônus de proficiência por descanso longo.',
+  options: [
+    { id: 'nuvem', name: 'Dádiva da Nuvem', desc: 'Reação, quando você ou uma criatura a até 9 m for alvo de um ataque: troque de lugar com outra criatura disposta a até 9 m e o ataque passa a mirá-la.' },
+    { id: 'fogo', name: 'Dádiva do Fogo', desc: 'Ao acertar um ataque com arma ou desarmado, cause 1d10 de dano de fogo extra.' },
+    { id: 'gelo', name: 'Dádiva do Gelo', desc: 'Como ação Bônus, ganhe PV temporários iguais a 1d12 + seu bônus de proficiência.' },
+    { id: 'colina', name: 'Dádiva da Colina', desc: 'Ao acertar um ataque, force uma criatura Grande ou menor a fazer SG de FOR (CD 8 + mod. CON + prof.) ou ficar Caída.' },
+    { id: 'pedra', name: 'Dádiva da Pedra', desc: 'Reação, quando sofrer dano: reduza o dano em 1d12 + seu bônus de proficiência.' },
+    { id: 'tempestade', name: 'Dádiva da Tempestade', desc: 'Reação, quando uma criatura a até 18 m te causar dano: cause 1d8 de dano de trovão nela.' },
+  ],
+}
+
+const LINHAGEM_ELFICA: OptionGroup = {
+  id: 'linhagem-elfica',
+  name: 'Linhagem Élfica',
+  desc: 'Escolha sua linhagem. Ela concede truques e magias conforme você sobe de nível.',
+  options: [
+    { id: 'drow', name: 'Drow', desc: 'Visão no escuro 36 m. Truque Globos de Luz. Nível 3: Fogo das Fadas. Nível 5: Escuridão (1×/descanso longo cada, ou gastando espaços).' },
+    { id: 'alto-elfo', name: 'Alto Elfo', desc: 'Um truque de Mago (trocável em cada descanso longo). Nível 3: Detectar Magia. Nível 5: Passo Nebuloso.' },
+    { id: 'elfo-floresta', name: 'Elfo da Floresta', desc: 'Deslocamento 10,5 m. Truque Druidismo. Nível 3: Passo Longo. Nível 5: Passar sem Rastro.' },
+  ],
+}
+
+const SENTIDOS_AGUCADOS: OptionGroup = {
+  id: 'sentidos-agucados',
+  name: 'Sentidos Aguçados',
+  desc: 'Escolha uma perícia para ganhar proficiência.',
+  options: [
+    { id: 'intuicao', name: 'Intuição', desc: 'Proficiência em Intuição.', grantsSkill: 'intuicao' },
+    { id: 'percepcao', name: 'Percepção', desc: 'Proficiência em Percepção.', grantsSkill: 'percepcao' },
+    { id: 'sobrevivencia', name: 'Sobrevivência', desc: 'Proficiência em Sobrevivência.', grantsSkill: 'sobrevivencia' },
+  ],
+}
+
+const LINHAGEM_GNOMICA: OptionGroup = {
+  id: 'linhagem-gnomica',
+  name: 'Linhagem Gnômica',
+  desc: 'Escolha sua linhagem gnômica.',
+  options: [
+    { id: 'rochas', name: 'Gnomo das Rochas', desc: 'Você conhece os truques Reparar e Ilusão Menor. Pode gastar 10 minutos para criar um dispositivo mecânico Minúsculo (caixa de música, brinquedo ou acendedor).' },
+    { id: 'floresta', name: 'Gnomo da Floresta', desc: 'Você conhece o truque Ilusão Menor e pode conjurar Falar com Animais um número de vezes igual ao seu bônus de proficiência por descanso longo.' },
+  ],
+}
+
+const LEGADO_INFERNAL: OptionGroup = {
+  id: 'legado-infernal',
+  name: 'Legado Infernal',
+  desc: 'Escolha seu legado. Ele define sua resistência e suas magias.',
+  options: [
+    { id: 'abissal', name: 'Abissal', desc: 'Resistência a dano de veneno. Truque Rajada de Veneno. Nível 3: Raio do Enfraquecimento. Nível 5: Cura de Ferimentos (Carisma, Inteligência ou Sabedoria como habilidade de conjuração).' },
+    { id: 'ctonico', name: 'Ctônico', desc: 'Resistência a dano necrótico. Truque Toque Gélido. Nível 3: Falsa Vida. Nível 5: Raio Ardente.' },
+    { id: 'infernal', name: 'Infernal', desc: 'Resistência a dano de fogo. Truque Rajada de Fogo. Nível 3: Repreensão Infernal. Nível 5: Escuridão.' },
+  ],
+}
+
+const REVELACAO_CELESTIAL: OptionGroup = {
+  id: 'revelacao-celestial',
+  name: 'Revelação Celestial',
+  level: 3,
+  desc: 'A partir do nível 3, escolha a forma que você assume ao se transformar (ação Bônus, 1 minuto, 1×/descanso longo).',
+  options: [
+    { id: 'ceifador', name: 'Ceifador Necrótico', desc: 'Asas espectrais de sombra: criaturas a até 3 m de você (exceto você) ficam Amedrontadas até o fim do seu próximo turno. Dano extra necrótico igual ao bônus de proficiência, 1×/turno.' },
+    { id: 'chamas', name: 'Chamas Interiores', desc: 'Uma aura flamejante: criaturas hostis que terminarem o turno a até 3 m sofrem dano radiante igual ao bônus de proficiência. Dano extra radiante 1×/turno.' },
+    { id: 'asas', name: 'Asas Radiantes', desc: 'Ganhe deslocamento de voo igual ao seu deslocamento. Dano extra radiante igual ao bônus de proficiência, 1×/turno.' },
+  ],
+}
 
 export const SPECIES: Species[] = [
   {
@@ -13,6 +102,7 @@ export const SPECIES: Species[] = [
       { name: 'Portador da Luz', desc: 'Você conhece o truque Luz. Carisma é sua habilidade de conjuração para ele.' },
       { name: 'Revelação Celestial', desc: 'A partir do nível 3, transforme-se (Bônus): Ceifador Necrótico, Chamas Interiores ou Asas Radiantes. Extra 1×/descanso longo: dano extra igual ao bônus de proficiência 1×/turno.' },
     ],
+    choices: [REVELACAO_CELESTIAL],
   },
   {
     id: 'draconato',
@@ -26,6 +116,7 @@ export const SPECIES: Species[] = [
       { name: 'Resistência a Dano', desc: 'Resistência ao tipo de dano do seu ancestral.' },
       { name: 'Voo Dracônico', desc: 'No nível 5, como ação Bônus, ganhe voo (velocidade igual à de deslocamento) por 10 minutos, 1×/descanso longo.' },
     ],
+    choices: [ANCESTRAL_DRACONICO],
   },
   {
     id: 'anao',
@@ -51,6 +142,7 @@ export const SPECIES: Species[] = [
       { name: 'Transe', desc: 'Você não precisa dormir; 4 horas de transe equivalem a um descanso longo.' },
       { name: 'Linhagem Élfica', desc: 'Escolha: Drow (Globos de Luz; depois Escuridão e Fogo das Fadas, visão no escuro 36 m), Alto Elfo (truque de mago; depois Detectar Magia e Passo Nebuloso) ou Elfo da Floresta (Druidismo; depois Passo Longo e Passar sem Rastro, deslocamento 10,5 m).' },
     ],
+    choices: [LINHAGEM_ELFICA, SENTIDOS_AGUCADOS],
   },
   {
     id: 'gnomo',
@@ -62,6 +154,7 @@ export const SPECIES: Species[] = [
       { name: 'Astúcia Gnômica', desc: 'Vantagem em salvaguardas de Inteligência, Sabedoria e Carisma.' },
       { name: 'Linhagem Gnômica', desc: 'Escolha: Gnomo das Rochas (truques Reparar e Ilusão Menor; dispositivos mecânicos) ou Gnomo da Floresta (truque Ilusão Menor; Falar com Animais utilizável bônus de proficiência ×/descanso longo).' },
     ],
+    choices: [LINHAGEM_GNOMICA],
   },
   {
     id: 'golias',
@@ -73,6 +166,7 @@ export const SPECIES: Species[] = [
       { name: 'Forma de Gigante', desc: 'No nível 5, como ação Bônus, fique Grande por 10 minutos: vantagem em testes de FOR e +3 m de deslocamento. 1×/descanso longo.' },
       { name: 'Feito de Pedra', desc: 'Vantagem em testes para terminar a condição Agarrado.' },
     ],
+    choices: [DADIVA_DE_GIGANTE],
   },
   {
     id: 'halfling',
@@ -96,6 +190,8 @@ export const SPECIES: Species[] = [
       { name: 'Habilidoso', desc: 'Ganhe proficiência em uma perícia à sua escolha.' },
       { name: 'Versátil', desc: 'Ganhe um talento de Origem à sua escolha (recomendado: Habilidoso).' },
     ],
+    extraSkills: 1,
+    extraOriginFeat: true,
   },
   {
     id: 'orc',
@@ -118,6 +214,7 @@ export const SPECIES: Species[] = [
       { name: 'Legado Infernal', desc: 'Escolha: Abissal (resistência a veneno; Rajada de Veneno, depois Raio do Enfraquecimento), Ctônico (resistência necrótica; Toque Gélido, depois Toque Vampírico) ou Infernal (resistência a fogo; Rajada de Fogo, depois Repreensão Infernal e Escuridão).' },
       { name: 'Presença Sobrenatural', desc: 'Você conhece o truque Taumaturgia.' },
     ],
+    choices: [LEGADO_INFERNAL],
   },
 ]
 

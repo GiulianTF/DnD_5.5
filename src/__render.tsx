@@ -100,6 +100,34 @@ tenta('LevelUpWizard (mago nv12)', () => renderToString(<LevelUpWizard char={mag
 tenta('SpellsTab (bruxo - pacto)', () => renderToString(<SpellsTab char={bruxo} />))
 tenta('LevelUpWizard (bruxo nv8)', () => renderToString(<LevelUpWizard char={bruxo} onClose={() => {}} />))
 
+console.log('\n== Escolhas de especie e de classe ==')
+// Golias/draconato com escolha pendente e com escolha feita; humano com talento extra
+const goliasPendente: Character = newCharacter({
+  name: 'Krag', classId: 'guerreiro', speciesId: 'golias', backgroundId: 'soldado',
+})
+const goliasCompleto: Character = {
+  ...goliasPendente,
+  speciesChoices: { 'dadiva-de-gigante': 'pedra' },
+  classChoices: { 'estilo-de-luta': 'estilo-defesa' },
+}
+const draconato: Character = newCharacter({
+  name: 'Vyx', classId: 'paladino', speciesId: 'draconato', backgroundId: 'nobre', level: 2,
+  speciesChoices: { 'ancestral-draconico': 'vermelho' },
+  classChoices: { 'estilo-de-luta': 'estilo-duelismo' },
+  hpRolls: [null],
+})
+const humano: Character = newCharacter({
+  name: 'Ana', classId: 'ladino', speciesId: 'humano', backgroundId: 'criminoso',
+  originFeats: ['habilidoso'],
+})
+tenta('SheetTab (golias com escolha pendente)', () => renderToString(<SheetTab char={goliasPendente} />))
+tenta('SheetTab (golias com dadiva e estilo)', () => renderToString(<SheetTab char={goliasCompleto} />))
+tenta('SheetTab (draconato paladino nv2)', () => renderToString(<SheetTab char={draconato} />))
+tenta('SheetTab (humano com talento de origem extra)', () => renderToString(<SheetTab char={humano} />))
+tenta('CharacterSheet (editar escolhas)', () => renderToString(<CharacterSheet char={goliasPendente} onBack={() => {}} />))
+tenta('LevelUpWizard (aasimar nv3: revelacao celestial)', () =>
+  renderToString(<LevelUpWizard char={newCharacter({ classId: 'bardo', speciesId: 'aasimar', level: 2, hpRolls: [null] })} onClose={() => {}} />))
+
 console.log('\n== Todas as 12 classes, do nivel 1 ao 20 ==')
 for (const c of CLASSES) {
   let erros = 0

@@ -240,6 +240,39 @@ label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 5p
 .roll-total.falha { color: var(--red); }
 @keyframes pop { 0% { transform: scale(.6); opacity: 0 } 60% { transform: scale(1.12) } 100% { transform: scale(1) } }
 
+/* Resultado flutuante: aparece em qualquer aba, mesmo com a página rolada */
+.roll-toast {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(78px + var(--safe-bottom));
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--card-2);
+  border: 1px solid var(--gold);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  cursor: pointer;
+  animation: toast-in .2s ease;
+}
+/* deixa espaço para o botão do rolador, que fica no canto direito */
+@media (min-width: 480px) { .roll-toast { left: auto; right: 82px; min-width: 320px; max-width: 520px; } }
+.roll-toast-info { flex: 1; min-width: 0; }
+.roll-toast-info .label {
+  font-weight: 600; font-size: .88rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.roll-toast-total {
+  font-size: 2rem; font-weight: 700; font-family: Georgia, serif; line-height: 1;
+  animation: pop .3s ease;
+}
+.roll-toast-total.critico { color: var(--gold); text-shadow: 0 0 14px rgba(224,178,92,.5); }
+.roll-toast-total.falha { color: var(--red); }
+@keyframes toast-in { from { transform: translateY(16px); opacity: 0 } }
+
 .dice-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .die-btn { font-size: .9rem; font-weight: 600; }
 

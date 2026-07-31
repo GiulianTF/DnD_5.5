@@ -19,6 +19,9 @@ export const newCharacter = (partial: Partial<Character> = {}): Character => ({
   baseAbilities: emptyScores(10),
   skillProfs: [],
   asiChoices: [],
+  speciesChoices: {},
+  classChoices: {},
+  originFeats: [],
   damageTaken: 0,
   tempHp: 0,
   hpRolls: [],
@@ -34,6 +37,26 @@ export const newCharacter = (partial: Partial<Character> = {}): Character => ({
   createdAt: Date.now(),
   updatedAt: Date.now(),
   ...partial,
+})
+
+/**
+ * Completa campos que não existiam em versões anteriores da ficha.
+ * Usado ao carregar do armazenamento local, ao importar backups e ao sincronizar.
+ */
+export const normalizeCharacter = (c: Character): Character => ({
+  ...c,
+  speciesChoices: c.speciesChoices ?? {},
+  classChoices: c.classChoices ?? {},
+  originFeats: c.originFeats ?? [],
+  asiChoices: c.asiChoices ?? [],
+  skillProfs: c.skillProfs ?? [],
+  inventory: c.inventory ?? [],
+  hpRolls: c.hpRolls ?? [],
+  spellsKnown: c.spellsKnown ?? [],
+  spellsPrepared: c.spellsPrepared ?? [],
+  slotsSpent: c.slotsSpent ?? {},
+  resourcesUsed: c.resourcesUsed ?? {},
+  backgroundBonuses: c.backgroundBonuses ?? {},
 })
 
 interface AppState {
@@ -78,7 +101,7 @@ export const useStore = create<AppState>()(
       supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
       lastSync: null,
 
-      addCharacter: (c) => set((s) => ({ characters: [...s.characters, c], activeId: c.id })),
+      addCharacter: (c) => set((s) => ({ characters: [...s.characters, normalizeCharacter(c)], activeId: c.id })),
 
       updateCharacter: (id, patch) =>
         set((s) => ({
@@ -94,7 +117,7 @@ export const useStore = create<AppState>()(
         })),
 
       setActive: (id) => set({ activeId: id }),
-      replaceAll: (chars) => set({ characters: chars }),
+      replaceAll: (chars) => set({ characters: chars.map(normalizeCharacter) }),
 
       pushRoll: (r) => set((s) => ({ rollLog: [r, ...s.rollLog].slice(0, 60) })),
       clearRolls: () => set({ rollLog: [] }),
@@ -187,6 +210,10 @@ export const useStore = create<AppState>()(
         supabaseKey: s.supabaseKey,
         lastSync: s.lastSync,
       }),
+      // Fichas salvas antes das escolhas de espécie/classe voltam sem esses campos.
+      onRehydrateStorage: () => (state) => {
+        if (state) state.characters = state.characters.map(normalizeCharacter)
+      },
     },
   ),
 )

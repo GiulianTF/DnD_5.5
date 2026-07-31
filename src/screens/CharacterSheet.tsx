@@ -7,8 +7,11 @@ import { ActionsTab } from './tabs/ActionsTab'
 import { ItemsTab } from './tabs/ItemsTab'
 import { SpellsTab } from './tabs/SpellsTab'
 import { LevelUpWizard } from './LevelUpWizard'
-import { Sheet } from '../components/ui'
+import { Card, ChoiceGroup, Sheet } from '../components/ui'
 import { useStore } from '../store/store'
+import { characterChoices } from '../engine/rules'
+import { ORIGIN_FEATS, featById } from '../data/feats'
+import { backgroundById } from '../data/backgrounds'
 
 type Tab = 'ficha' | 'acoes' | 'itens' | 'magias'
 
@@ -27,6 +30,17 @@ export function CharacterSheet({ char, onBack }: { char: Character; onBack: () =
 
   const cls = classById(char.classId)
   const sub = cls?.subclasses.find((s) => s.id === char.subclassId)
+  const species = speciesById(char.speciesId)
+  const escolhas = characterChoices(char)
+  const bg = backgroundById(char.backgroundId)
+
+  const escolher = (source: 'especie' | 'classe', groupId: string, optionId: string) => {
+    if (source === 'especie') {
+      update(char.id, (c) => ({ speciesChoices: { ...(c.speciesChoices ?? {}), [groupId]: optionId } }))
+    } else {
+      update(char.id, (c) => ({ classChoices: { ...(c.classChoices ?? {}), [groupId]: optionId } }))
+    }
+  }
 
   return (
     <div>
@@ -83,6 +97,42 @@ export function CharacterSheet({ char, onBack }: { char: Character; onBack: () =
             Prefira o botão <strong>⬆ Nível</strong> na barra superior — ele mostra as novas habilidades e
             conduz as escolhas de subclasse, atributos e magias.
           </div>
+
+          {/* Escolhas de espécie e de classe (ancestral dracônico, dádiva de gigante, estilo de luta...) */}
+          {escolhas.map(({ source, group, chosen }) => (
+            <ChoiceGroup
+              key={`${source}-${group.id}`}
+              group={group}
+              value={chosen?.id}
+              onChange={(optionId) => escolher(source, group.id, optionId)}
+            />
+          ))}
+
+          {/* Talento de Origem adicional concedido pela espécie (Humano: traço Versátil) */}
+          {species?.extraOriginFeat && (
+            <Card title="Talento de Origem adicional">
+              <p className="muted tiny" style={{ marginBottom: 10 }}>
+                {species.name} concede um talento de Origem além do que vem do antecedente
+                {bg ? ` (${featById(bg.featId)?.name})` : ''}.
+              </p>
+              {ORIGIN_FEATS.map((f) => {
+                const escolhido = (char.originFeats ?? [])[0] === f.id
+                return (
+                  <button
+                    key={f.id}
+                    className={`choice${escolhido ? ' on' : ''}`}
+                    onClick={() => update(char.id, { originFeats: escolhido ? [] : [f.id] })}
+                  >
+                    <strong>{escolhido ? '✓ ' : ''}{f.name}</strong>
+                    <span>{f.desc}</span>
+                  </button>
+                )
+              })}
+              {(char.originFeats ?? []).length === 0 && (
+                <div className="banner warn">Você ainda não escolheu este talento.</div>
+              )}
+            </Card>
+          )}
         </Sheet>
       )}
     </div>

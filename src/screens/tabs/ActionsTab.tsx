@@ -5,12 +5,10 @@ import { attackActions, abilityMods, proficiencyBonus, spellcasting } from '../.
 import { roll, rollDamage, type Advantage } from '../../engine/dice'
 import { useStore } from '../../store/store'
 import { Card, Empty, Segmented } from '../../components/ui'
-import { RollResult } from '../../components/DiceRoller'
 
 export function ActionsTab({ char }: { char: Character }) {
   const pushRoll = useStore((s) => s.pushRoll)
   const [advantage, setAdvantage] = useState<Advantage>('normal')
-  const [last, setLast] = useState<ReturnType<typeof roll> | null>(null)
   const [critArmed, setCritArmed] = useState<Record<string, boolean>>({})
 
   const attacks = attackActions(char)
@@ -18,24 +16,20 @@ export function ActionsTab({ char }: { char: Character }) {
   const pb = proficiencyBonus(char.level)
   const sc = spellcasting(char)
 
+  // O resultado aparece no aviso flutuante (RollToast), visível em qualquer ponto da página.
   const doAttack = (uid: string, name: string, bonus: number) => {
     const entry = roll({ label: `Ataque: ${name}`, sides: 20, modifier: bonus, advantage, isD20Test: true })
-    setLast(entry)
     pushRoll(entry)
     setCritArmed((c) => ({ ...c, [uid]: entry.crit === 'critico' }))
   }
 
   const doDamage = (uid: string, name: string, dice: string, bonus: number, type: string) => {
-    const entry = rollDamage(`Dano: ${name}`, dice, bonus, type, critArmed[uid] ?? false)
-    setLast(entry)
-    pushRoll(entry)
+    pushRoll(rollDamage(`Dano: ${name}`, dice, bonus, type, critArmed[uid] ?? false))
     setCritArmed((c) => ({ ...c, [uid]: false }))
   }
 
   return (
     <div>
-      {last && <RollResult entry={last} />}
-
       <Card title="Vantagem / Desvantagem">
         <Segmented
           value={advantage}
@@ -106,7 +100,7 @@ export function ActionsTab({ char }: { char: Character }) {
           </div>
           <button className="sm primary" onClick={() => {
             const entry = roll({ label: 'Ataque: Desarmado', sides: 20, modifier: mods.for + pb, advantage, isD20Test: true })
-            setLast(entry); pushRoll(entry)
+            pushRoll(entry)
           }}>Atacar {mods.for + pb >= 0 ? `+${mods.for + pb}` : mods.for + pb}</button>
         </div>
       </Card>
@@ -122,7 +116,7 @@ export function ActionsTab({ char }: { char: Character }) {
             </div>
             <button className="sm primary" onClick={() => {
               const entry = roll({ label: 'Ataque de Magia', sides: 20, modifier: sc.attackBonus, advantage, isD20Test: true })
-              setLast(entry); pushRoll(entry)
+              pushRoll(entry)
             }}>Rolar +{sc.attackBonus}</button>
           </div>
         </Card>

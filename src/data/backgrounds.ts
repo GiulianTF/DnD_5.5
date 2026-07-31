@@ -1,4 +1,13 @@
-import type { Background } from '../types'
+import type { Background, EquipmentGrant, EquipmentOption } from '../types'
+
+/**
+ * Cada antecedente do PHB 2024 oferece duas opções: (A) o pacote de itens do
+ * antecedente com um troco em moedas, ou (B) 50 PO para comprar o que quiser.
+ */
+const eqOptions = (items: EquipmentGrant[], gold: number, label: string): EquipmentOption[] => [
+  { id: 'A', label, items, gold },
+  { id: 'B', label: '50 PO (compre seu próprio equipamento)', items: [], gold: 50 },
+]
 
 export const BACKGROUNDS: Background[] = [
   {
@@ -9,6 +18,10 @@ export const BACKGROUNDS: Background[] = [
     skills: ['intuicao', 'religiao'],
     tool: 'Suprimentos de calígrafo',
     equipment: 'Livro de preces, símbolo sagrado, pergaminho (10 folhas), robe, 8 PO',
+    equipmentOptions: eqOptions(
+      [{ itemId: 'livro-de-preces' }, { itemId: 'simbolo-sagrado' }, { itemId: 'pergaminho', qty: 10 }, { itemId: 'robe' }],
+      8, 'Livro de preces, símbolo sagrado, 10 folhas de pergaminho, robe e 8 PO',
+    ),
     desc: 'Você serviu em um templo, aprendendo ritos sagrados e a canalizar a devoção.',
   },
   {
@@ -19,6 +32,10 @@ export const BACKGROUNDS: Background[] = [
     skills: ['investigacao', 'persuasao'],
     tool: 'Ferramentas de artesão (à sua escolha)',
     equipment: 'Ferramentas de artesão, 2 sacolas, roupas de viajante, 32 PO',
+    equipmentOptions: eqOptions(
+      [{ itemId: 'ferramentas-artesao' }, { itemId: 'sacola', qty: 2 }, { itemId: 'roupas-viajante' }],
+      32, 'Ferramentas de artesão, 2 sacolas, roupas de viajante e 32 PO',
+    ),
     desc: 'Você foi aprendiz de um mestre artesão e domina um ofício.',
   },
   {
@@ -29,6 +46,10 @@ export const BACKGROUNDS: Background[] = [
     skills: ['enganacao', 'prestidigitacao'],
     tool: 'Kit de falsificação',
     equipment: 'Kit de falsificação, roupas finas, 15 PO',
+    equipmentOptions: eqOptions(
+      [{ itemId: 'kit-falsificacao' }, { itemId: 'roupas-finas' }],
+      15, 'Kit de falsificação, roupas finas e 15 PO',
+    ),
     desc: 'Você sobreviveu com lábia, golpes e identidades falsas.',
   },
   {
@@ -39,6 +60,10 @@ export const BACKGROUNDS: Background[] = [
     skills: ['furtividade', 'prestidigitacao'],
     tool: 'Ferramentas de ladrão',
     equipment: '2 adagas, ferramentas de ladrão, pé de cabra, roupas de viajante, 16 PO',
+    equipmentOptions: eqOptions(
+      [{ itemId: 'adaga', qty: 2 }, { itemId: 'ferramentas-de-ladrao' }, { itemId: 'pe-de-cabra' }, { itemId: 'roupas-viajante' }],
+      16, '2 adagas, ferramentas de ladrão, pé de cabra, roupas de viajante e 16 PO',
+    ),
     desc: 'Você viveu à margem da lei, entre assaltos, contrabando e espionagem.',
   },
   {
@@ -49,6 +74,10 @@ export const BACKGROUNDS: Background[] = [
     skills: ['acrobacia', 'atuacao'],
     tool: 'Instrumento musical (à sua escolha)',
     equipment: 'Instrumento musical, 2 fantasias, espelho, perfume, roupas de viajante, 11 PO',
+    equipmentOptions: eqOptions(
+      [{ itemId: 'instrumento-musical' }, { itemId: 'fantasia', qty: 2 }, { itemId: 'espelho' }, { itemId: 'perfume' }, { itemId: 'roupas-viajante' }],
+      11, 'Instrumento musical, 2 fantasias, espelho, perfume, roupas de viajante e 11 PO',
+    ),
     desc: 'Você viveu dos aplausos, viajando e se apresentando para multidões.',
   },
   {
@@ -59,6 +88,10 @@ export const BACKGROUNDS: Background[] = [
     skills: ['lidar-animais', 'natureza'],
     tool: 'Ferramentas de carpinteiro',
     equipment: 'Foice, ferramentas de carpinteiro, kit de curandeiro, pá, panela de ferro, roupas de viajante, 30 PO',
+    equipmentOptions: eqOptions(
+      [{ itemId: 'foice-curta' }, { itemId: 'ferramentas-carpinteiro' }, { itemId: 'kit-curandeiro' }, { itemId: 'pa' }, { itemId: 'panela-de-ferro' }, { itemId: 'roupas-viajante' }],
+      30, 'Foice, ferramentas de carpinteiro, kit de curandeiro, pá, panela de ferro, roupas de viajante e 30 PO',
+    ),
     desc: 'Você cresceu na lida do campo, forte e acostumado ao trabalho duro.',
   },
   {
@@ -69,6 +102,10 @@ export const BACKGROUNDS: Background[] = [
     skills: ['atletismo', 'percepcao'],
     tool: 'Conjunto de jogo (à sua escolha)',
     equipment: 'Lança, cacetete, besta leve com 20 virotes, lanterna coberta, algemas, apito, conjunto de jogo, roupas de viajante, 12 PO',
+    equipmentOptions: eqOptions(
+      [{ itemId: 'lanca' }, { itemId: 'cacetete' }, { itemId: 'besta-leve' }, { itemId: 'virotes' }, { itemId: 'lampiao' }, { itemId: 'algemas' }, { itemId: 'apito' }, { itemId: 'conjunto-de-jogo' }, { itemId: 'roupas-viajante' }],
+      12, 'Lança, cacetete, besta leve com 20 virotes, lampião, algemas, apito, conjunto de jogo, roupas de viajante e 12 PO',
+    ),
     desc: 'Você vigiou muralhas e portões, sempre atento a ameaças.',
   },
   {
@@ -79,6 +116,10 @@ export const BACKGROUNDS: Background[] = [
     skills: ['furtividade', 'sobrevivencia'],
     tool: 'Ferramentas de cartógrafo',
     equipment: 'Arco curto com 20 flechas, ferramentas de cartógrafo, saco de dormir, tenda, roupas de viajante, 3 PO',
+    equipmentOptions: eqOptions(
+      [{ itemId: 'arco-curto' }, { itemId: 'aljava' }, { itemId: 'ferramentas-cartografo' }, { itemId: 'saco-de-dormir' }, { itemId: 'tenda' }, { itemId: 'roupas-viajante' }],
+      3, 'Arco curto, aljava com 20 flechas, ferramentas de cartógrafo, saco de dormir, tenda, roupas de viajante e 3 PO',
+    ),
     desc: 'Você cresceu nos ermos, guiando viajantes por trilhas selvagens. (Iniciado em Magia: Druida)',
   },
   {
@@ -89,6 +130,10 @@ export const BACKGROUNDS: Background[] = [
     skills: ['medicina', 'religiao'],
     tool: 'Kit de herbalismo',
     equipment: 'Cajado, kit de herbalismo, saco de dormir, livro de filosofia, lampião a óleo, 3 frascos de óleo, roupas de viajante, 16 PO',
+    equipmentOptions: eqOptions(
+      [{ itemId: 'bordao' }, { itemId: 'kit-herbalismo' }, { itemId: 'saco-de-dormir' }, { itemId: 'livro' }, { itemId: 'lampiao' }, { itemId: 'frasco-de-oleo', qty: 3 }, { itemId: 'roupas-viajante' }],
+      16, 'Cajado, kit de herbalismo, saco de dormir, livro de filosofia, lampião, 3 frascos de óleo, roupas de viajante e 16 PO',
+    ),
     desc: 'Você viveu em reclusão, buscando respostas em silêncio e contemplação.',
   },
   {
@@ -99,6 +144,10 @@ export const BACKGROUNDS: Background[] = [
     skills: ['lidar-animais', 'persuasao'],
     tool: 'Ferramentas de navegador',
     equipment: 'Ferramentas de navegador, 2 sacolas, roupas de viajante, 22 PO',
+    equipmentOptions: eqOptions(
+      [{ itemId: 'ferramentas-navegador' }, { itemId: 'sacola', qty: 2 }, { itemId: 'roupas-viajante' }],
+      22, 'Ferramentas de navegador, 2 sacolas, roupas de viajante e 22 PO',
+    ),
     desc: 'Você comprou e vendeu mercadorias por rotas comerciais, aprendendo o valor de tudo.',
   },
   {
@@ -109,6 +158,10 @@ export const BACKGROUNDS: Background[] = [
     skills: ['historia', 'persuasao'],
     tool: 'Conjunto de jogo (à sua escolha)',
     equipment: 'Conjunto de jogo, roupas finas, perfume, 29 PO',
+    equipmentOptions: eqOptions(
+      [{ itemId: 'conjunto-de-jogo' }, { itemId: 'roupas-finas' }, { itemId: 'perfume' }],
+      29, 'Conjunto de jogo, roupas finas, perfume e 29 PO',
+    ),
     desc: 'Você foi criado em berço de privilégio, educado em política e etiqueta.',
   },
   {
@@ -119,6 +172,10 @@ export const BACKGROUNDS: Background[] = [
     skills: ['arcanismo', 'historia'],
     tool: 'Suprimentos de calígrafo',
     equipment: 'Cajado, suprimentos de calígrafo, livro de história, pergaminho (8 folhas), robe, 8 PO',
+    equipmentOptions: eqOptions(
+      [{ itemId: 'bordao' }, { itemId: 'suprimentos-caligrafo' }, { itemId: 'livro' }, { itemId: 'pergaminho', qty: 8 }, { itemId: 'robe' }],
+      8, 'Cajado, suprimentos de calígrafo, livro de história, 8 folhas de pergaminho, robe e 8 PO',
+    ),
     desc: 'Você passou anos entre livros e pergaminhos em busca de conhecimento. (Iniciado em Magia: Mago)',
   },
   {
@@ -129,6 +186,10 @@ export const BACKGROUNDS: Background[] = [
     skills: ['acrobacia', 'percepcao'],
     tool: 'Ferramentas de navegador',
     equipment: 'Adaga, ferramentas de navegador, corda, roupas de viajante, 20 PO',
+    equipmentOptions: eqOptions(
+      [{ itemId: 'adaga' }, { itemId: 'ferramentas-navegador' }, { itemId: 'corda' }, { itemId: 'roupas-viajante' }],
+      20, 'Adaga, ferramentas de navegador, corda (15 m), roupas de viajante e 20 PO',
+    ),
     desc: 'Você navegou mares revoltos e conhece navios, nós e portos.',
   },
   {
@@ -139,6 +200,10 @@ export const BACKGROUNDS: Background[] = [
     skills: ['investigacao', 'percepcao'],
     tool: 'Suprimentos de calígrafo',
     equipment: 'Suprimentos de calígrafo, roupas finas, lampião, 3 frascos de óleo, pergaminho (12 folhas), 23 PO',
+    equipmentOptions: eqOptions(
+      [{ itemId: 'suprimentos-caligrafo' }, { itemId: 'roupas-finas' }, { itemId: 'lampiao' }, { itemId: 'frasco-de-oleo', qty: 3 }, { itemId: 'pergaminho', qty: 12 }],
+      23, 'Suprimentos de calígrafo, roupas finas, lampião, 3 frascos de óleo, 12 folhas de pergaminho e 23 PO',
+    ),
     desc: 'Você trabalhou copiando textos, contratos e registros com precisão.',
   },
   {
@@ -149,6 +214,10 @@ export const BACKGROUNDS: Background[] = [
     skills: ['atletismo', 'intimidacao'],
     tool: 'Conjunto de jogo (à sua escolha)',
     equipment: 'Lança, arco curto com 20 flechas, conjunto de jogo, kit de curandeiro, aljava, roupas de viajante, 14 PO',
+    equipmentOptions: eqOptions(
+      [{ itemId: 'lanca' }, { itemId: 'arco-curto' }, { itemId: 'aljava' }, { itemId: 'conjunto-de-jogo' }, { itemId: 'kit-curandeiro' }, { itemId: 'roupas-viajante' }],
+      14, 'Lança, arco curto, aljava com 20 flechas, conjunto de jogo, kit de curandeiro, roupas de viajante e 14 PO',
+    ),
     desc: 'Você foi treinado para a guerra e sobreviveu ao campo de batalha.',
   },
   {
@@ -159,6 +228,10 @@ export const BACKGROUNDS: Background[] = [
     skills: ['furtividade', 'intuicao'],
     tool: 'Ferramentas de ladrão',
     equipment: '2 adagas, ferramentas de ladrão, conjunto de jogo, saco de dormir, 2 sacolas, roupas de viajante, 16 PO',
+    equipmentOptions: eqOptions(
+      [{ itemId: 'adaga', qty: 2 }, { itemId: 'ferramentas-de-ladrao' }, { itemId: 'conjunto-de-jogo' }, { itemId: 'saco-de-dormir' }, { itemId: 'sacola', qty: 2 }, { itemId: 'roupas-viajante' }],
+      16, '2 adagas, ferramentas de ladrão, conjunto de jogo, saco de dormir, 2 sacolas, roupas de viajante e 16 PO',
+    ),
     desc: 'Você cresceu nas ruas ou na estrada, sem raízes, aprendendo a se virar sozinho.',
   },
 ]

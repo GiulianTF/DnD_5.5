@@ -4,7 +4,7 @@ import { CharacterList } from './screens/CharacterList'
 import { CharacterCreator } from './screens/CharacterCreator'
 import { CharacterSheet } from './screens/CharacterSheet'
 import { CloudTab } from './screens/CloudTab'
-import { DiceRollerSheet } from './components/DiceRoller'
+import { DiceRollerSheet, RollToast } from './components/DiceRoller'
 
 type View = 'lista' | 'criar' | 'ficha' | 'nuvem'
 
@@ -81,6 +81,9 @@ export default function App() {
           </nav>
         </>
       )}
+
+      {/* O rolador já mostra o resultado dentro dele — não duplicamos o aviso flutuante. */}
+      <RollToast oculto={roller} />
 
       {roller && <DiceRollerSheet onClose={() => setRoller(false)} />}
     </div>

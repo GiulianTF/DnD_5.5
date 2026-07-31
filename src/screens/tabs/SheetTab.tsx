@@ -2,22 +2,21 @@ import { useState } from 'react'
 import type { Character } from '../../types'
 import { ABILITIES, ABILITY_NAMES } from '../../types'
 import {
-  abilityMods, armorClass, characterFeats, characterResources, currentHp, finalAbilities,
-  fmtMod, initiative, maxHp, passivePerception, proficiencyBonus, saves, skillValues, speed,
-  spellcasting, unlockedFeatures,
+  abilityMods, armorClass, characterChoices, characterFeats, characterResources, currentHp,
+  finalAbilities, fmtMod, initiative, maxHp, passivePerception, proficiencyBonus, saves,
+  skillValues, speed, spellcasting, unlockedFeatures,
 } from '../../engine/rules'
+import { FEAT_CATEGORY_NAMES } from '../../data/feats'
 import { useStore } from '../../store/store'
 import { roll } from '../../engine/dice'
 import { classById } from '../../data/classes'
 import { speciesById } from '../../data/species'
 import { backgroundById } from '../../data/backgrounds'
-import { Card, Sheet, Stepper } from '../../components/ui'
-import { RollResult } from '../../components/DiceRoller'
+import { Card, Sheet } from '../../components/ui'
 
 export function SheetTab({ char }: { char: Character }) {
   const { pushRoll, applyDamage, heal, setTempHp, shortRest, longRest, spendHitDie, useResource } = useStore()
   const [hpDelta, setHpDelta] = useState(0)
-  const [lastRoll, setLastRoll] = useState<ReturnType<typeof roll> | null>(null)
   const [restSheet, setRestSheet] = useState<'curto' | 'longo' | null>(null)
   const [restMsg, setRestMsg] = useState<string[]>([])
 
@@ -30,11 +29,13 @@ export function SheetTab({ char }: { char: Character }) {
   const cls = classById(char.classId)
   const sc = spellcasting(char)
   const resources = characterResources(char)
+  const feats = characterFeats(char)
+  const escolhas = characterChoices(char)
+  const pendentes = escolhas.filter((e) => !e.chosen)
 
+  // O resultado aparece no aviso flutuante (RollToast), visível em qualquer ponto da página.
   const doRoll = (label: string, modifier: number) => {
-    const entry = roll({ label, sides: 20, modifier, isD20Test: true })
-    setLastRoll(entry)
-    pushRoll(entry)
+    pushRoll(roll({ label, sides: 20, modifier, isD20Test: true }))
   }
 
   const doShortRest = () => {
@@ -57,7 +58,12 @@ export function SheetTab({ char }: { char: Character }) {
 
   return (
     <div>
-      {lastRoll && <RollResult entry={lastRoll} />}
+      {pendentes.length > 0 && (
+        <div className="banner warn">
+          Escolhas pendentes: <strong>{pendentes.map((p) => p.group.name).join(', ')}</strong>.
+          Toque no nome do personagem, no topo, para escolher.
+        </div>
+      )}
 
       {/* --- Pontos de Vida --- */}
       <Card title="Pontos de Vida">
@@ -200,7 +206,42 @@ export function SheetTab({ char }: { char: Character }) {
         ))}
       </Card>
 
-      <Card title="Espécie, Antecedente e Talentos">
+      {/* --- Talentos --- */}
+      <Card title="Talentos">
+        {feats.length === 0 && <div className="muted tiny">Nenhum talento ainda.</div>}
+        {feats.map((f) => (
+          <div className="feature" key={f.id}>
+            <h4>
+              {f.name}{' '}
+              <span className="muted tiny">· {FEAT_CATEGORY_NAMES[f.category]} · {f.origem}</span>
+            </h4>
+            <p>{f.desc}</p>
+          </div>
+        ))}
+      </Card>
+
+      {/* --- Escolhas de espécie e de classe --- */}
+      {escolhas.length > 0 && (
+        <Card title="Escolhas de Espécie e Classe">
+          {escolhas.map(({ group, chosen, source }) => (
+            <div className="feature" key={`${source}-${group.id}`}>
+              <h4>
+                {group.name}{' '}
+                <span className="muted tiny">· {source === 'especie' ? 'Espécie' : 'Classe'}</span>
+              </h4>
+              {chosen ? (
+                <p><strong className="gold">{chosen.name}:</strong> {chosen.desc}</p>
+              ) : (
+                <p style={{ color: 'var(--red)' }}>
+                  Escolha pendente — abra <strong>Editar personagem</strong> (toque no nome, no topo) para escolher.
+                </p>
+              )}
+            </div>
+          ))}
+        </Card>
+      )}
+
+      <Card title="Espécie e Antecedente">
         <div className="feature">
           <h4>{speciesById(char.speciesId)?.name}</h4>
           {speciesById(char.speciesId)?.traits.map((t) => (
@@ -211,12 +252,6 @@ export function SheetTab({ char }: { char: Character }) {
           <h4>{backgroundById(char.backgroundId)?.name}</h4>
           <p>{backgroundById(char.backgroundId)?.desc}</p>
         </div>
-        {characterFeats(char).map((f) => (
-          <div className="feature" key={f.id}>
-            <h4>{f.name} <span className="muted tiny">· Talento de {f.category}</span></h4>
-            <p>{f.desc}</p>
-          </div>
-        ))}
       </Card>
 
       <Card title="Anotações">
