@@ -1,15 +1,17 @@
 // Teste de fumaça das regras. Executado via esbuild + node; não faz parte do app.
 import type { Character } from './types'
-import { newCharacter } from './store/store'
+import { newCharacter, normalizeCharacter } from './store/store'
 import {
-  armorClass, attackActions, maxHp, spellSlots, pactSlots, preparedLimit, cantripLimit,
-  characterResources, levelUpSummary, finalAbilities, saves, skillValues, spellcasting,
+  armorClass, attackActions, characterFeats, maxHp, spellSlots, pactSlots, preparedLimit, cantripLimit,
+  characterResources, levelUpSummary, finalAbilities, pendingChoices, saves, skillValues, spellcasting,
 } from './engine/rules'
 import { CLASSES } from './data/classes'
+import { SPECIES } from './data/species'
 import { SPELLS } from './data/spells'
 import { BACKGROUNDS } from './data/backgrounds'
-import { ALL_ITEMS } from './data/equipment'
+import { ALL_ITEMS, itemById } from './data/equipment'
 import { featById } from './data/feats'
+import { skillById } from './data/skills'
 
 // Roda no Node via scripts/run-tests.cjs; o projeto não depende de @types/node.
 declare const process: { exitCode?: number }
@@ -143,6 +145,77 @@ for (const bg of BACKGROUNDS) {
   ok(!!featById(bg.featId), `antecedente ${bg.name}: talento "${bg.featId}" existe`)
   ok(bg.abilities.length === 3, `antecedente ${bg.name}: 3 habilidades`)
 }
+
+console.log('\n== Escolhas de especie e de classe ==')
+for (const sp of SPECIES) {
+  for (const gr of sp.choices ?? []) {
+    ok(gr.options.length >= 2, `${sp.name} / ${gr.name}: ${gr.options.length} opcoes`)
+    for (const o of gr.options) {
+      if (o.grantsSkill) ok(!!skillById(o.grantsSkill), `${gr.name} / ${o.name}: pericia "${o.grantsSkill}" existe`)
+    }
+  }
+}
+/** Só as escolhas da espécie — a classe tem as suas (ex.: estilo de luta do guerreiro). */
+const pendentesDaEspecie = (c: Character) => pendingChoices(c).filter((p) => p.source === 'especie')
+const golias = newCharacter({ speciesId: 'golias' })
+ok(pendentesDaEspecie(golias).some((c) => c.group.id === 'dadiva-de-gigante'), 'golias sem escolha: dadiva de gigante fica pendente')
+ok(pendentesDaEspecie({ ...golias, speciesChoices: { 'dadiva-de-gigante': 'pedra' } }).length === 0, 'golias com dadiva escolhida: nada pendente na especie')
+const draco = newCharacter({ speciesId: 'draconato' })
+ok(pendentesDaEspecie(draco).some((c) => c.group.id === 'ancestral-draconico'), 'draconato sem escolha: ancestral fica pendente')
+ok(pendentesDaEspecie(newCharacter({ speciesId: 'aasimar' })).length === 0, 'aasimar nv1: revelacao celestial so aparece no nv3')
+ok(pendentesDaEspecie(newCharacter({ speciesId: 'aasimar', level: 3 })).length === 1, 'aasimar nv3: revelacao celestial fica pendente')
+const elfo = newCharacter({ speciesId: 'elfo', speciesChoices: { 'linhagem-elfica': 'drow', 'sentidos-agucados': 'percepcao' } })
+ok(skillValues(elfo).find((s) => s.id === 'percepcao')?.proficient === true, 'elfo: Sentidos Agucados concede a pericia escolhida')
+
+console.log('\n== Estilo de Luta ==')
+const guerreiro1 = newCharacter({ classId: 'guerreiro' })
+ok(pendingChoices(guerreiro1).some((c) => c.group.id === 'estilo-de-luta'), 'guerreiro nv1: estilo de luta fica pendente')
+ok(!pendingChoices(newCharacter({ classId: 'paladino' })).some((c) => c.group.id === 'estilo-de-luta'), 'paladino nv1: estilo de luta so no nv2')
+ok(pendingChoices(newCharacter({ classId: 'paladino', level: 2 })).some((c) => c.group.id === 'estilo-de-luta'), 'paladino nv2: estilo de luta fica pendente')
+for (const c of CLASSES) {
+  for (const gr of c.choices ?? []) {
+    for (const o of gr.options) {
+      if (gr.id === 'estilo-de-luta') ok(!!featById(o.id), `${c.name} / estilo "${o.name}": talento existe`)
+    }
+  }
+}
+const comDefesa: Character = {
+  ...newCharacter({ classId: 'guerreiro', classChoices: { 'estilo-de-luta': 'estilo-defesa' } }),
+  inventory: [{ uid: 'a', itemId: 'cota-de-malha', qty: 1, equipped: true }],
+}
+const semDefesa: Character = { ...comDefesa, classChoices: { 'estilo-de-luta': 'estilo-duelismo' } }
+ok(armorClass(comDefesa).total === armorClass(semDefesa).total + 1, `estilo Defesa da +1 CA (${armorClass(comDefesa).total} vs ${armorClass(semDefesa).total})`)
+ok(characterFeats(comDefesa).some((f) => f.id === 'estilo-defesa'), 'estilo escolhido aparece na lista de talentos')
+
+console.log('\n== Talento de origem adicional (Humano) ==')
+const humano = newCharacter({ speciesId: 'humano', backgroundId: 'soldado', originFeats: ['durao'] })
+ok(characterFeats(humano).some((f) => f.id === 'durao'), 'talento de origem extra aparece na ficha')
+ok(characterFeats(humano).some((f) => f.id === 'atacante-selvagem'), 'talento do antecedente continua na ficha')
+ok(maxHp(humano) === maxHp({ ...humano, originFeats: [] }) + 2, 'talento Durao extra soma +2 PV por nivel')
+for (const f of characterFeats(humano)) ok(!!f.origem && !!f.desc, `talento ${f.name}: tem origem e descricao`)
+
+console.log('\n== Equipamento inicial ==')
+for (const c of CLASSES) {
+  ok(c.equipmentOptions.length >= 2, `${c.name}: ${c.equipmentOptions.length} opcoes de equipamento`)
+  for (const opt of c.equipmentOptions) {
+    for (const it of opt.items) ok(!!itemById(it.itemId), `${c.name} opcao ${opt.id}: item "${it.itemId}" existe`)
+    ok(opt.items.length > 0 || opt.gold > 0, `${c.name} opcao ${opt.id}: da itens ou moedas`)
+  }
+}
+for (const bg of BACKGROUNDS) {
+  ok(bg.equipmentOptions.length >= 2, `${bg.name}: ${bg.equipmentOptions.length} opcoes de equipamento`)
+  for (const opt of bg.equipmentOptions) {
+    for (const it of opt.items) ok(!!itemById(it.itemId), `${bg.name} opcao ${opt.id}: item "${it.itemId}" existe`)
+  }
+}
+
+console.log('\n== Fichas antigas (sem os campos novos) ==')
+const antiga = JSON.parse(JSON.stringify(newCharacter({ classId: 'guerreiro' }))) as Character
+delete (antiga as Partial<Character>).speciesChoices
+delete (antiga as Partial<Character>).classChoices
+delete (antiga as Partial<Character>).originFeats
+ok(normalizeCharacter(antiga).originFeats.length === 0, 'normalizeCharacter preenche os campos que faltam')
+ok(characterFeats(antiga).length > 0 && armorClass(antiga).total > 0, 'ficha antiga continua calculando sem quebrar')
 
 console.log(falhas === 0 ? '\n>>> TODOS OS TESTES DE REGRAS PASSARAM' : `\n>>> ${falhas} FALHA(S) NAS REGRAS`)
 if (falhas > 0) process.exitCode = 1

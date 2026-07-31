@@ -29,8 +29,29 @@ export const FEATS: Feat[] = [
   { id: 'adepto-elemental', name: 'Adepto Elemental', category: 'geral', desc: '+1 INT, SAB ou CAR. Escolha um tipo de dano (ácido, elétrico, fogo, frio ou trovão): suas magias ignoram resistência a ele e tratam 1s nos dados de dano como 2s.', abilityIncrease: ['int', 'sab', 'car'], repeatable: true },
   { id: 'tocado-pela-sombra', name: 'Tocado pela Sombra', category: 'geral', desc: '+1 INT, SAB ou CAR. Aprenda Invisibilidade e uma magia de 1º nível de Ilusão ou Necromancia; conjure cada uma 1×/descanso longo sem gastar espaço.', abilityIncrease: ['int', 'sab', 'car'] },
   { id: 'tocado-pelo-feerico', name: 'Tocado pelo Feérico', category: 'geral', desc: '+1 INT, SAB ou CAR. Aprenda Passo Nebuloso e uma magia de 1º nível de Adivinhação ou Encantamento; conjure cada uma 1×/descanso longo sem gastar espaço.', abilityIncrease: ['int', 'sab', 'car'] },
+
+  // ---------- Talentos de Estilo de Luta (PHB 2024) ----------
+  { id: 'estilo-arquearia', name: 'Arquearia', category: 'estilo', desc: 'Você ganha +2 nas jogadas de ataque feitas com armas à distância.' },
+  { id: 'estilo-combate-cego', name: 'Combate Cego', category: 'estilo', desc: 'Você tem Percepção às Cegas de 3 m: enxerga qualquer criatura nesse raio que não esteja atrás de cobertura total, mesmo Invisível ou se você estiver Cego.' },
+  { id: 'estilo-defesa', name: 'Defesa', category: 'estilo', desc: 'Enquanto estiver usando armadura, você ganha +1 na Classe de Armadura.' },
+  { id: 'estilo-duelismo', name: 'Duelismo', category: 'estilo', desc: 'Quando estiver empunhando uma arma corpo a corpo em uma mão e nenhuma outra arma, você ganha +2 nas jogadas de dano com ela.' },
+  { id: 'estilo-interceptacao', name: 'Interceptação', category: 'estilo', desc: 'Reação, quando uma criatura a até 1,5 m de você causar dano a outra criatura: reduza esse dano em 1d10 + seu bônus de proficiência. Você precisa estar empunhando uma arma ou escudo.' },
+  { id: 'estilo-armas-grandes', name: 'Combate com Armas Grandes', category: 'estilo', desc: 'Ao rolar dano com uma arma corpo a corpo de duas mãos (ou Versátil usada com as duas mãos), trate resultados de 1 ou 2 nos dados de dano como 3.' },
+  { id: 'estilo-protecao', name: 'Proteção', category: 'estilo', desc: 'Reação, quando uma criatura que você possa ver atacar um alvo a até 1,5 m de você: imponha Desvantagem na jogada de ataque. Você precisa estar empunhando um escudo.' },
+  { id: 'estilo-armas-arremesso', name: 'Combate com Armas de Arremesso', category: 'estilo', desc: 'Ao acertar um ataque com uma arma de Arremesso, você ganha +2 na jogada de dano. Sacar a arma faz parte do ataque.' },
+  { id: 'estilo-duas-armas', name: 'Combate com Duas Armas', category: 'estilo', desc: 'Ao fazer o ataque extra da propriedade Leve, você pode somar seu modificador de habilidade ao dano desse ataque.' },
+  { id: 'estilo-desarmado', name: 'Combate Desarmado', category: 'estilo', desc: 'Seus ataques desarmados causam 1d6 + FOR de dano de concussão (1d8 se você não estiver empunhando nada). No início de cada turno, cause 1d4 de dano a uma criatura Agarrada por você.' },
+  { id: 'estilo-combatente-abencoado', name: 'Combatente Abençoado', category: 'estilo', desc: 'Você aprende dois truques de Clérigo à sua escolha; Carisma é sua habilidade de conjuração para eles. Ao subir de nível, pode trocá-los por outros truques de Clérigo.' },
+  { id: 'estilo-guerreiro-druidico', name: 'Guerreiro Druídico', category: 'estilo', desc: 'Você aprende dois truques de Druida à sua escolha; Sabedoria é sua habilidade de conjuração para eles. Ao subir de nível, pode trocá-los por outros truques de Druida.' },
 ]
 
 export const featById = (id: string) => FEATS.find((f) => f.id === id)
 export const ORIGIN_FEATS = FEATS.filter((f) => f.category === 'origem')
 export const GENERAL_FEATS = FEATS.filter((f) => f.category === 'geral')
+export const FIGHTING_STYLES = FEATS.filter((f) => f.category === 'estilo')
+
+export const FEAT_CATEGORY_NAMES: Record<Feat['category'], string> = {
+  origem: 'Origem',
+  geral: 'Geral',
+  estilo: 'Estilo de Luta',
+}

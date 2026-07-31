@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import type { OptionGroup } from '../types'
 
 export function Sheet({ title, onClose, children, footer }: {
   title: string
@@ -71,6 +72,24 @@ export function Choice({ selected, title, desc, onClick }: {
       <strong>{selected ? '✓ ' : ''}{title}</strong>
       {desc && <span>{desc}</span>}
     </button>
+  )
+}
+
+/** Cartão de escolha obrigatória (ancestral dracônico, estilo de luta, dádiva de gigante...). */
+export function ChoiceGroup({ group, value, onChange, aviso = true }: {
+  group: OptionGroup
+  value?: string
+  onChange: (optionId: string) => void
+  aviso?: boolean
+}) {
+  return (
+    <Card title={group.name}>
+      {group.desc && <p className="muted tiny" style={{ marginBottom: 10 }}>{group.desc}</p>}
+      {group.options.map((o) => (
+        <Choice key={o.id} selected={value === o.id} title={o.name} desc={o.desc} onClick={() => onChange(o.id)} />
+      ))}
+      {aviso && !value && <div className="banner warn">Escolha uma opção para continuar.</div>}
+    </Card>
   )
 }
 

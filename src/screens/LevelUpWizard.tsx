@@ -5,11 +5,11 @@ import { classById } from '../data/classes'
 import { SPELLS, spellById } from '../data/spells'
 import { GENERAL_FEATS, featById } from '../data/feats'
 import {
-  abilityMod, cantripLimit, finalAbilities, levelUpSummary, maxSpellLevel, preparedLimit,
+  abilityMod, cantripLimit, finalAbilities, levelUpSummary, maxSpellLevel, pendingChoices, preparedLimit,
 } from '../engine/rules'
 import { rollHitDie } from '../engine/dice'
 import { useStore } from '../store/store'
-import { Card, Choice, Segmented, Sheet } from '../components/ui'
+import { Card, Choice, ChoiceGroup, Segmented, Sheet } from '../components/ui'
 
 type AsiMode = 'asi2' | 'asi11' | 'feat'
 
@@ -27,6 +27,8 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
   const [featId, setFeatId] = useState<string>('')
   const [novosTruques, setNovosTruques] = useState<string[]>([])
   const [novasMagias, setNovasMagias] = useState<string[]>([])
+  const [novasEscolhasEspecie, setNovasEscolhasEspecie] = useState<Record<string, string>>({})
+  const [novasEscolhasClasse, setNovasEscolhasClasse] = useState<Record<string, string>>({})
 
   if (!resumo) return null
   if (novoNivel > 20) {
@@ -54,6 +56,12 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
     (s) => s.level >= 1 && s.level <= maxLvl && s.classes.includes(char.classId) && !char.spellsKnown.includes(s.id),
   )
 
+  // Escolhas de espécie/classe desbloqueadas até o novo nível e ainda não feitas
+  const escolhasPendentes = pendingChoices(char, novoNivel)
+  const escolhaSelecionada = (source: 'especie' | 'classe', groupId: string) =>
+    source === 'especie' ? novasEscolhasEspecie[groupId] : novasEscolhasClasse[groupId]
+  const escolhasOk = escolhasPendentes.every((e) => !!escolhaSelecionada(e.source, e.group.id))
+
   const precisaSubclasse = resumo.needsSubclass && !subclassId
   const asiOk = !resumo.needsAsi || (
     asiMode === 'feat' ? !!featId
@@ -62,7 +70,7 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
   )
   const truquesOk = novosTruques.length === truquesNovos
   const magiasOk = novasMagias.length === magiasNovas
-  const podeConfirmar = !precisaSubclasse && asiOk && truquesOk && magiasOk
+  const podeConfirmar = !precisaSubclasse && asiOk && truquesOk && magiasOk && escolhasOk
 
   const toggleAbility = (k: AbilityKey, limite: number) => {
     if (asiAbilities.includes(k)) setAsiAbilities(asiAbilities.filter((x) => x !== k))
@@ -100,6 +108,8 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
       subclassId: subclassId ?? char.subclassId,
       asiChoices,
       hpRolls,
+      speciesChoices: { ...(char.speciesChoices ?? {}), ...novasEscolhasEspecie },
+      classChoices: { ...(char.classChoices ?? {}), ...novasEscolhasClasse },
       spellsKnown: [...char.spellsKnown, ...novosTruques, ...novasMagias],
       spellsPrepared: [...char.spellsPrepared, ...novosTruques, ...novasMagias],
     })
@@ -176,6 +186,19 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
           )}
         </Card>
       )}
+
+      {/* --- Escolhas de espécie e de classe (Estilo de Luta, Revelação Celestial...) --- */}
+      {escolhasPendentes.map(({ source, group }) => (
+        <ChoiceGroup
+          key={`${source}-${group.id}`}
+          group={group}
+          value={escolhaSelecionada(source, group.id)}
+          onChange={(optionId) => {
+            if (source === 'especie') setNovasEscolhasEspecie((p) => ({ ...p, [group.id]: optionId }))
+            else setNovasEscolhasClasse((p) => ({ ...p, [group.id]: optionId }))
+          }}
+        />
+      ))}
 
       {/* --- Incremento de atributo / talento --- */}
       {resumo.needsAsi && (
@@ -294,6 +317,7 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
       {!podeConfirmar && (
         <div className="muted tiny center" style={{ marginTop: 8 }}>
           {precisaSubclasse && 'Escolha uma subclasse. '}
+          {!escolhasOk && `Faça as escolhas pendentes: ${escolhasPendentes.filter((e) => !escolhaSelecionada(e.source, e.group.id)).map((e) => e.group.name).join(', ')}. `}
           {!asiOk && 'Complete o incremento de atributo ou talento. '}
           {!truquesOk && `Escolha ${truquesNovos} truque(s). `}
           {!magiasOk && `Escolha ${magiasNovas} magia(s).`}

@@ -21,6 +21,40 @@ export interface Skill {
   ability: AbilityKey
 }
 
+// ---------- Escolhas (traços de espécie, características de classe) ----------
+export interface ChoiceOption {
+  id: string
+  name: string
+  desc: string
+  /** perícia concedida por esta opção (id de Skill) */
+  grantsSkill?: string
+}
+
+/** Um grupo de escolha ("Ancestral Dracônico", "Estilo de Luta", ...) com suas opções. */
+export interface OptionGroup {
+  id: string
+  name: string
+  /** texto explicativo do grupo */
+  desc?: string
+  /** nível em que a escolha é feita (padrão: 1) */
+  level?: number
+  options: ChoiceOption[]
+}
+
+// ---------- Equipamento inicial ----------
+export interface EquipmentGrant {
+  itemId: string
+  qty?: number
+}
+
+/** Uma das opções (A/B/C) de equipamento inicial de classe ou antecedente. */
+export interface EquipmentOption {
+  id: string
+  label: string
+  items: EquipmentGrant[]
+  gold: number
+}
+
 // ---------- Espécies ----------
 export interface Species {
   id: string
@@ -29,6 +63,12 @@ export interface Species {
   speed: number
   darkvision?: number
   traits: { name: string; desc: string }[]
+  /** escolhas obrigatórias do traço (ex.: cor do dragão, dádiva de gigante) */
+  choices?: OptionGroup[]
+  /** quantas perícias extras a espécie concede à escolha (Humano: 1) */
+  extraSkills?: number
+  /** a espécie concede um talento de Origem adicional (Humano) */
+  extraOriginFeat?: boolean
 }
 
 // ---------- Antecedentes ----------
@@ -40,11 +80,13 @@ export interface Background {
   skills: string[] // proficiências em perícias
   tool: string
   equipment: string
+  /** opções A/B de equipamento inicial (PHB 2024) */
+  equipmentOptions: EquipmentOption[]
   desc: string
 }
 
 // ---------- Talentos ----------
-export type FeatCategory = 'origem' | 'geral'
+export type FeatCategory = 'origem' | 'geral' | 'estilo'
 export interface Feat {
   id: string
   name: string
@@ -100,6 +142,10 @@ export interface DndClass {
   subclasses: Subclass[]
   resources: ClassResource[]
   startingEquipment: string
+  /** opções A/B/C de equipamento inicial (PHB 2024) */
+  equipmentOptions: EquipmentOption[]
+  /** escolhas de características (Estilo de Luta, Ordem Divina, ...) */
+  choices?: OptionGroup[]
 }
 
 // ---------- Magias ----------
@@ -211,6 +257,12 @@ export interface Character {
   baseAbilities: AbilityScores
   skillProfs: string[]
   asiChoices: AsiChoice[]
+  /** opção escolhida em cada grupo de escolha da espécie: { 'ancestral-draconico': 'vermelho' } */
+  speciesChoices: Record<string, string>
+  /** opção escolhida em cada grupo de escolha da classe: { 'estilo-de-luta': 'defesa' } */
+  classChoices: Record<string, string>
+  /** talentos de Origem adicionais (ex.: traço Versátil do Humano) */
+  originFeats: string[]
   /** PV: dano sofrido (max é derivado) e PV temporário */
   damageTaken: number
   tempHp: number

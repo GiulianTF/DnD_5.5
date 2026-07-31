@@ -1,5 +1,5 @@
 import type {
-  AbilityKey, AbilityScores, Character, Item, InventoryEntry,
+  AbilityKey, AbilityScores, Character, ChoiceOption, Item, InventoryEntry, OptionGroup,
 } from '../types'
 import { ABILITIES } from '../types'
 import { classById, FULL_CASTER_SLOTS, HALF_CASTER_SLOTS, PACT_SLOTS } from '../data/classes'
@@ -13,6 +13,62 @@ export const abilityMod = (score: number) => Math.floor((score - 10) / 2)
 export const fmtMod = (n: number) => (n >= 0 ? `+${n}` : `${n}`)
 
 export const proficiencyBonus = (level: number) => 2 + Math.floor((level - 1) / 4)
+
+// ---------- Escolhas de espécie e de classe ----------
+/** Um grupo de escolha junto com a opção que o personagem selecionou (se houver). */
+export interface ResolvedChoice {
+  source: 'especie' | 'classe'
+  group: OptionGroup
+  chosen: ChoiceOption | null
+}
+
+/** Grupos de escolha já desbloqueados pelo nível atual, com a opção selecionada. */
+export function characterChoices(char: Character, uptoLevel = char.level): ResolvedChoice[] {
+  const out: ResolvedChoice[] = []
+  const push = (source: ResolvedChoice['source'], groups: OptionGroup[] | undefined, picks: Record<string, string>) => {
+    for (const group of groups ?? []) {
+      if ((group.level ?? 1) > uptoLevel) continue
+      out.push({ source, group, chosen: group.options.find((o) => o.id === picks[group.id]) ?? null })
+    }
+  }
+  push('especie', speciesById(char.speciesId)?.choices, char.speciesChoices ?? {})
+  push('classe', classById(char.classId)?.choices, char.classChoices ?? {})
+  return out
+}
+
+/** Escolhas obrigatórias ainda não feitas — usado para avisar na ficha. */
+export const pendingChoices = (char: Character, uptoLevel = char.level) =>
+  characterChoices(char, uptoLevel).filter((c) => !c.chosen)
+
+/** Perícias concedidas por opções escolhidas (ex.: Sentidos Aguçados do Elfo). */
+export function grantedSkills(char: Character): string[] {
+  return characterChoices(char)
+    .map((c) => c.chosen?.grantsSkill)
+    .filter((s): s is string => !!s)
+}
+
+/** Todas as perícias treinadas: escolhidas na criação + concedidas por traços. */
+export const allSkillProfs = (char: Character): string[] =>
+  [...new Set([...(char.skillProfs ?? []), ...grantedSkills(char)])]
+
+/**
+ * Ids de todos os talentos ativos: o de origem do antecedente, os de origem
+ * extras (Humano), os escolhidos em ASI e os Estilos de Luta escolhidos.
+ */
+export function allFeatIds(char: Character): string[] {
+  const ids: string[] = []
+  const bg = backgroundById(char.backgroundId)
+  if (bg) ids.push(bg.featId)
+  ids.push(...(char.originFeats ?? []))
+  for (const c of char.asiChoices ?? []) if (c.featId) ids.push(c.featId)
+  // Estilos de Luta são talentos escolhidos por características de classe
+  for (const { chosen } of characterChoices(char)) {
+    if (chosen && featById(chosen.id)) ids.push(chosen.id)
+  }
+  return [...new Set(ids)]
+}
+
+export const hasFeat = (char: Character, featId: string) => allFeatIds(char).includes(featId)
 
 /** Item resolvido de uma entrada do inventário (aplica bônus mágico +1/+2/+3 sobre a base). */
 export interface ResolvedItem {
@@ -139,6 +195,11 @@ export function armorClass(char: Character): { total: number; breakdown: string 
   }
 
   let total = base
+  // Estilo de Luta: Defesa (+1 na CA usando armadura)
+  if (armorEntry && hasFeat(char, 'estilo-defesa')) {
+    total += 1
+    label += ' +1 Defesa'
+  }
   if (shieldEntry) {
     const shieldAC = (shieldEntry.item.armor?.baseAC ?? 2)
     total += shieldAC
@@ -169,9 +230,7 @@ export function maxHp(char: Character): number {
   // Robustez Anã: +1 PV por nível
   if (char.speciesId === 'anao') total += char.level
   // Talento Durão: +2 PV por nível
-  const hasTough = char.asiChoices.some((c) => c.featId === 'durao')
-    || backgroundById(char.backgroundId)?.featId === 'durao'
-  if (hasTough) total += char.level * 2
+  if (hasFeat(char, 'durao')) total += char.level * 2
   // Resiliência Dracônica (Feiticeiro Dracônico)
   if (char.subclassId === 'draconica') total += 3 + char.level
 
@@ -183,9 +242,7 @@ export const currentHp = (char: Character) => Math.max(0, maxHp(char) - char.dam
 /** Iniciativa = mod. DES (+ prof. com o talento Alerta). */
 export function initiative(char: Character): number {
   const mods = abilityMods(char)
-  const bg = backgroundById(char.backgroundId)
-  const hasAlerta = bg?.featId === 'alerta' || char.asiChoices.some((c) => c.featId === 'alerta')
-  return mods.des + (hasAlerta ? proficiencyBonus(char.level) : 0)
+  return mods.des + (hasFeat(char, 'alerta') ? proficiencyBonus(char.level) : 0)
 }
 
 export function speed(char: Character): number {
@@ -218,8 +275,9 @@ export function saves(char: Character) {
 export function skillValues(char: Character) {
   const mods = abilityMods(char)
   const pb = proficiencyBonus(char.level)
+  const profs = allSkillProfs(char)
   return SKILLS.map((s) => {
-    const prof = char.skillProfs.includes(s.id)
+    const prof = profs.includes(s.id)
     return { ...s, proficient: prof, value: mods[s.ability] + (prof ? pb : 0) }
   })
 }
@@ -401,9 +459,7 @@ export function characterResources(char: Character): ResourceState[] {
   if (sr) list.push(sr)
 
   // Talento Sortudo
-  const bg = backgroundById(char.backgroundId)
-  const hasLucky = bg?.featId === 'sortudo-talento' || char.asiChoices.some((c) => c.featId === 'sortudo-talento')
-  if (hasLucky) {
+  if (hasFeat(char, 'sortudo-talento')) {
     list.push({ id: 'pontos-de-sorte', name: 'Pontos de Sorte', max: pb, used: char.resourcesUsed['pontos-de-sorte'] ?? 0, recharge: 'longo' })
   }
 
@@ -477,11 +533,24 @@ export function levelUpSummary(char: Character, newLevel: number) {
   }
 }
 
-/** Talentos ativos do personagem (origem + escolhidos). */
+/** Talentos ativos do personagem, com a origem de cada um para exibir na ficha. */
 export function characterFeats(char: Character) {
-  const ids: string[] = []
   const bg = backgroundById(char.backgroundId)
-  if (bg) ids.push(bg.featId)
-  for (const c of char.asiChoices) if (c.featId) ids.push(c.featId)
-  return ids.map((id) => featById(id)).filter((f): f is NonNullable<typeof f> => !!f)
+  const origens = new Map<string, string>()
+  if (bg) origens.set(bg.featId, `Antecedente: ${bg.name}`)
+  for (const id of char.originFeats ?? []) {
+    origens.set(id, `Espécie: ${speciesById(char.speciesId)?.name ?? 'talento adicional'}`)
+  }
+  for (const c of char.asiChoices ?? []) {
+    if (c.featId) origens.set(c.featId, `Escolhido no nível ${c.level}`)
+  }
+  for (const { chosen, group } of characterChoices(char)) {
+    if (chosen && featById(chosen.id)) origens.set(chosen.id, group.name)
+  }
+  return [...origens.entries()]
+    .map(([id, origem]) => {
+      const feat = featById(id)
+      return feat ? { ...feat, origem } : null
+    })
+    .filter((f): f is NonNullable<typeof f> => !!f)
 }
