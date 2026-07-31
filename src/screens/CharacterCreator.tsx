@@ -7,8 +7,8 @@ import { CLASSES, classById } from '../data/classes'
 import { SKILLS, skillById } from '../data/skills'
 import { SPELLS } from '../data/spells'
 import { ORIGIN_FEATS, featById } from '../data/feats'
-import { WEAPONS, ARMORS, SHIELD, GEAR, itemById } from '../data/equipment'
-import { abilityMod, fmtMod, cantripLimit, preparedLimit, maxSpellLevel } from '../engine/rules'
+import { WEAPONS, ARMORS, SHIELD, GEAR, MASTERY_DESC, itemById } from '../data/equipment'
+import { abilityMod, fmtMod, cantripLimit, preparedLimit, maxSpellLevel, masteryEligibleWeapons } from '../engine/rules'
 import { POINT_BUY_COST, STANDARD_ARRAY, emptyScores, pointBuyRemaining } from '../engine/pointbuy'
 import { roll4d6DropLowest } from '../engine/dice'
 import { uid } from '../engine/uid'
@@ -26,13 +26,18 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
   const [speciesChoices, setSpeciesChoices] = useState<Record<string, string>>({})
   const [speciesSkills, setSpeciesSkills] = useState<string[]>([])
   const [originFeats, setOriginFeats] = useState<string[]>([])
-  const [backgroundId, setBackgroundId] = useState('soldado')
+  const [backgroundId, setBackgroundId] = useState('')
   const [bgBonuses, setBgBonuses] = useState<Partial<Record<AbilityKey, number>>>({})
+  /** Regra opcional de mesa: distribuir os bônus do antecedente em qualquer atributo. */
+  const [bgFree, setBgFree] = useState(false)
   const [classId, setClassId] = useState('guerreiro')
   const [classChoices, setClassChoices] = useState<Record<string, string>>({})
+  const [masteries, setMasteries] = useState<string[]>([])
   const [method, setMethod] = useState<AbilityMethod>('array')
   const [scores, setScores] = useState<AbilityScores>(emptyScores(8))
   const [arrayAssign, setArrayAssign] = useState<Partial<Record<AbilityKey, number>>>({})
+  /** Texto cru dos campos manuais — a validação (3..20) só acontece ao sair do campo. */
+  const [manualText, setManualText] = useState<Partial<Record<AbilityKey, string>>>({})
   const [rolled, setRolled] = useState<number[]>([])
   const [skillProfs, setSkillProfs] = useState<string[]>([])
   const [cantrips, setCantrips] = useState<string[]>([])
@@ -43,22 +48,27 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
   const [extraItems, setExtraItems] = useState<string[]>([])
 
   const cls = classById(classId)!
-  const bg = BACKGROUNDS.find((b) => b.id === backgroundId)!
+  const bg = BACKGROUNDS.find((b) => b.id === backgroundId)
   const sp = SPECIES.find((s) => s.id === speciesId)!
 
   // Escolhas de espécie e de classe já disponíveis no nível 1
   const speciesGroups = (sp.choices ?? []).filter((g) => (g.level ?? 1) <= 1)
   const classGroups = (cls.choices ?? []).filter((g) => (g.level ?? 1) <= 1)
   const extraSkills = sp.extraSkills ?? 0
+  const bgSkills = bg?.skills ?? []
 
   const classEquip = cls.equipmentOptions.find((o) => o.id === classEquipId) ?? cls.equipmentOptions[0]
-  const bgEquip = bg.equipmentOptions.find((o) => o.id === bgEquipId) ?? bg.equipmentOptions[0]
+  const bgEquip = bg?.equipmentOptions.find((o) => o.id === bgEquipId) ?? bg?.equipmentOptions[0]
 
-  // Personagem provisório para consultar limites de magia
+  // Personagem provisório para consultar limites de magia e armas elegíveis à maestria
   const draft: Character = useMemo(
     () => newCharacter({ classId, level: 1, speciesId, backgroundId, baseAbilities: scores, backgroundBonuses: bgBonuses }),
     [classId, speciesId, backgroundId, scores, bgBonuses],
   )
+
+  // Maestria em Armas (Guerreiro 3 no nível 1; Bárbaro, Paladino, Patrulheiro e Ladino 2)
+  const masteryNeeded = cls.masteryCount?.(1) ?? 0
+  const masteryWeapons = useMemo(() => masteryEligibleWeapons(draft), [draft])
 
   const finalScores = useMemo(() => {
     const r = { ...scores }
@@ -66,8 +76,10 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
     return r
   }, [scores, bgBonuses])
 
+  /** Atributos que podem receber os bônus do antecedente (3 do antecedente ou todos, na regra livre). */
+  const bgAbilityOptions = bgFree ? ABILITIES : (bg?.abilities ?? [])
   const bgTotal = Object.values(bgBonuses).reduce((a, b) => a + (b ?? 0), 0)
-  const bgOk = bgTotal === 3 && Object.values(bgBonuses).every((v) => (v ?? 0) <= 2)
+  const bgOk = !!bg && bgTotal === 3 && Object.values(bgBonuses).every((v) => (v ?? 0) <= 2)
 
   const cantripsNeeded = cantripLimit(draft)
   const spellsNeeded = classId === 'mago' ? 6 : (preparedLimit(draft) ?? 0)
@@ -81,7 +93,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
   const skillsFromChoices = speciesGroups
     .map((g) => g.options.find((o) => o.id === speciesChoices[g.id])?.grantsSkill)
     .filter((s): s is string => !!s)
-  const skillsJaConcedidas = [...new Set([...bg.skills, ...speciesSkills, ...skillsFromChoices])]
+  const skillsJaConcedidas = [...new Set([...bgSkills, ...speciesSkills, ...skillsFromChoices])]
   const escolhidasDaClasse = skillProfs.filter((s) => !skillsJaConcedidas.includes(s)).length
 
   const especieOk =
@@ -94,7 +106,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
       case 0: return name.trim().length > 0
       case 1: return !!speciesId && especieOk
       case 2: return bgOk
-      case 3: return !!classId && classGroups.every((g) => !!classChoices[g.id])
+      case 3: return !!classId && classGroups.every((g) => !!classChoices[g.id]) && masteries.length === masteryNeeded
       case 4: return methodComplete()
       case 5: return escolhidasDaClasse === cls.skillCount
       case 6: return cantrips.length === cantripsNeeded && (spellsNeeded === 0 || spells.length === spellsNeeded)
@@ -105,7 +117,11 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
   function methodComplete(): boolean {
     if (method === 'pointbuy') return pointBuyRemaining(scores) === 0
     if (method === 'array') return Object.keys(arrayAssign).length === 6
-    return ABILITIES.every((k) => scores[k] >= 3 && scores[k] <= 20)
+    return ABILITIES.every((k) => {
+      const texto = manualText[k] ?? String(scores[k])
+      const n = Number(texto)
+      return texto.trim() !== '' && Number.isFinite(n) && n >= 3 && n <= 20 && scores[k] >= 3 && scores[k] <= 20
+    })
   }
 
   const toggle = (list: string[], setList: (v: string[]) => void, id: string, limit: number) => {
@@ -128,7 +144,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
   const ouroTotal = (classEquip?.gold ?? 0) + (bgEquip?.gold ?? 0) + extraGold
 
   const finish = () => {
-    const allSkills = [...new Set([...bg.skills, ...speciesSkills, ...skillProfs])]
+    const allSkills = [...new Set([...bgSkills, ...speciesSkills, ...skillProfs])]
     const char = newCharacter({
       name: name.trim(),
       speciesId,
@@ -136,8 +152,10 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
       originFeats,
       backgroundId,
       backgroundBonuses: bgBonuses,
+      freeBackgroundBonuses: bgFree,
       classId,
       classChoices,
+      weaponMasteries: masteries,
       level: 1,
       abilityMethod: method,
       baseAbilities: scores,
@@ -183,37 +201,42 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
       {/* ---------- 1. ESPÉCIE ---------- */}
       {step === 1 && (
         <>
-          {SPECIES.map((s) => (
-            <Choice
-              key={s.id}
-              selected={speciesId === s.id}
-              title={s.name}
-              desc={`${s.size} · Deslocamento ${s.speed} m${s.darkvision ? ` · Visão no escuro ${s.darkvision} m` : ''}`}
-              onClick={() => {
-                setSpeciesId(s.id)
-                setSpeciesChoices({})
-                setSpeciesSkills([])
-                setOriginFeats([])
-              }}
-            />
-          ))}
-
-          {sp && (
-            <Card title={`Traços de ${sp.name}`}>
-              {sp.traits.map((t) => (
-                <div className="feature" key={t.name}>
-                  <h4>{t.name}</h4>
-                  <p>{t.desc}</p>
-                </div>
-              ))}
-              {(sp.choices ?? []).some((g) => (g.level ?? 1) > 1) && (
-                <div className="muted tiny" style={{ marginTop: 8 }}>
-                  Esta espécie ainda tem escolhas que só aparecem em níveis mais altos — o assistente de
-                  evolução vai pedi-las na hora certa.
-                </div>
-              )}
-            </Card>
-          )}
+          <Card title="Escolha a espécie">
+            <p className="muted tiny" style={{ marginBottom: 10 }}>
+              Toque numa espécie para selecioná-la e ver os traços; use a seta para abrir sem escolher.
+            </p>
+            {SPECIES.map((s) => (
+              <Choice
+                key={s.id}
+                selected={speciesId === s.id}
+                title={s.name}
+                desc={`${s.size} · Deslocamento ${s.speed} m${s.darkvision ? ` · Visão no escuro ${s.darkvision} m` : ''}`}
+                defaultOpen={speciesId === s.id}
+                details={
+                  <>
+                    {s.traits.map((t) => (
+                      <div className="feature" key={t.name}>
+                        <h4>{t.name}</h4>
+                        <p>{t.desc}</p>
+                      </div>
+                    ))}
+                    {(s.extraSkills ?? 0) > 0 && <p><strong className="gold">Perícias extras:</strong> {s.extraSkills}</p>}
+                    {s.extraOriginFeat && <p><strong className="gold">Talento de Origem adicional:</strong> sim</p>}
+                    {(s.choices ?? []).some((g) => (g.level ?? 1) > 1) && (
+                      <p>Esta espécie ainda tem escolhas que só aparecem em níveis mais altos — o assistente
+                        de evolução vai pedi-las na hora certa.</p>
+                    )}
+                  </>
+                }
+                onClick={() => {
+                  setSpeciesId(s.id)
+                  setSpeciesChoices({})
+                  setSpeciesSkills([])
+                  setOriginFeats([])
+                }}
+              />
+            ))}
+          </Card>
 
           {/* Escolhas obrigatórias da espécie (cor do dragão, dádiva de gigante, linhagem...) */}
           {speciesGroups.map((g) => (
@@ -232,7 +255,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
                 {sp.name} concede proficiência em {extraSkills} perícia à sua escolha.
               </p>
               {SKILLS.map((s) => {
-                const doBg = bg.skills.includes(s.id)
+                const doBg = bgSkills.includes(s.id)
                 const marcada = speciesSkills.includes(s.id)
                 return (
                   <button
@@ -254,21 +277,27 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
             <Card title="Talento de Origem adicional">
               <p className="muted tiny" style={{ marginBottom: 10 }}>
                 O traço <strong>Versátil</strong> de {sp.name} concede um talento de Origem à sua escolha,
-                além do talento que vem do seu antecedente ({featById(bg.featId)?.name}).
+                além do talento que vem do seu antecedente
+                {bg ? ` (${featById(bg.featId)?.name})` : ''}.
               </p>
               {ORIGIN_FEATS.map((f) => {
-                const jaDoAntecedente = f.id === bg.featId && !f.repeatable
+                const jaDoAntecedente = !!bg && f.id === bg.featId && !f.repeatable
+                const escolhido = originFeats[0] === f.id
                 return (
-                  <button
+                  <Choice
                     key={f.id}
-                    className={`choice${originFeats[0] === f.id ? ' on' : ''}`}
+                    selected={escolhido}
+                    title={f.name}
                     disabled={jaDoAntecedente}
-                    onClick={() => setOriginFeats(originFeats[0] === f.id ? [] : [f.id])}
-                  >
-                    <strong>{originFeats[0] === f.id ? '✓ ' : ''}{f.name}</strong>
-                    <span>{f.desc}</span>
-                    {jaDoAntecedente && <span className="gold">Você já ganha este talento pelo antecedente.</span>}
-                  </button>
+                    defaultOpen={escolhido}
+                    details={
+                      <>
+                        <p>{f.desc}</p>
+                        {jaDoAntecedente && <p className="gold">Você já ganha este talento pelo antecedente.</p>}
+                      </>
+                    }
+                    onClick={() => setOriginFeats(escolhido ? [] : [f.id])}
+                  />
                 )
               })}
               {originFeats.length === 0 && <div className="banner warn">Escolha um talento de Origem para continuar.</div>}
@@ -280,79 +309,107 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
       {/* ---------- 2. ANTECEDENTE ---------- */}
       {step === 2 && (
         <>
-          {BACKGROUNDS.map((b) => (
-            <Choice
-              key={b.id}
-              selected={backgroundId === b.id}
-              title={b.name}
-              desc={`${b.abilities.map((a) => ABILITY_NAMES[a]).join(', ')} · Talento: ${featById(b.featId)?.name}`}
-              onClick={() => { setBackgroundId(b.id); setBgBonuses({}); setBgEquipId('A') }}
-            />
-          ))}
-
-          <Card title="Bônus de Habilidade do Antecedente">
+          <Card title="Escolha o antecedente">
             <p className="muted tiny" style={{ marginBottom: 10 }}>
-              Distribua <strong>+2 e +1</strong> ou <strong>+1, +1 e +1</strong> entre as três habilidades do antecedente.
-              Distribuído: {bgTotal}/3.
+              Nenhum antecedente vem marcado. Toque em um para escolhê-lo e ver os detalhes;
+              a seta abre as informações sem selecionar.
             </p>
-            {bg.abilities.map((k) => (
-              <div className="spread" key={k} style={{ marginBottom: 8 }}>
-                <span>{ABILITY_NAMES[k]}</span>
-                <div className="segmented" style={{ width: 170 }}>
-                  {[0, 1, 2].map((v) => (
-                    <button
-                      key={v}
-                      className={(bgBonuses[k] ?? 0) === v ? 'on' : ''}
-                      onClick={() => setBgBonuses({ ...bgBonuses, [k]: v })}
-                    >+{v}</button>
-                  ))}
-                </div>
-              </div>
+            {BACKGROUNDS.map((b) => (
+              <Choice
+                key={b.id}
+                selected={backgroundId === b.id}
+                title={b.name}
+                desc={`${b.abilities.map((a) => ABILITY_NAMES[a]).join(', ')} · Talento: ${featById(b.featId)?.name}`}
+                defaultOpen={backgroundId === b.id}
+                details={
+                  <>
+                    <p>{b.desc}</p>
+                    <p><strong className="gold">Talento de Origem:</strong> {featById(b.featId)?.name} — {featById(b.featId)?.desc}</p>
+                    <p><strong className="gold">Perícias:</strong> {b.skills.map((s) => skillById(s).name).join(', ')}</p>
+                    <p><strong className="gold">Ferramenta:</strong> {b.tool}</p>
+                    <p><strong className="gold">Bônus de habilidade:</strong> +2/+1 ou +1/+1/+1 entre {b.abilities.map((a) => ABILITY_NAMES[a]).join(', ')}</p>
+                    <p><strong className="gold">Equipamento:</strong> {b.equipment}</p>
+                    <p>Você escolhe entre este pacote e 50 PO no passo de Equipamento.</p>
+                  </>
+                }
+                onClick={() => { setBackgroundId(b.id); setBgBonuses({}); setBgEquipId('A') }}
+              />
             ))}
-            {!bgOk && <div className="banner warn">O total precisa ser exatamente 3, com no máximo +2 em uma habilidade.</div>}
-            <hr />
-            <div className="muted tiny">
-              <strong className="gold">Talento de Origem:</strong> {featById(bg.featId)?.name} — {featById(bg.featId)?.desc}
-              <br /><br />
-              <strong className="gold">Perícias:</strong> {bg.skills.map((s) => skillById(s).name).join(', ')}
-              <br /><strong className="gold">Ferramenta:</strong> {bg.tool}
-              <br /><strong className="gold">Equipamento:</strong> {bg.equipment}
-              <br /><span className="muted">Você escolhe entre este pacote e 50 PO no passo de Equipamento.</span>
-            </div>
+            {!backgroundId && <div className="banner warn">Escolha um antecedente para continuar.</div>}
           </Card>
+
+          {bg && (
+            <Card title="Bônus de Habilidade do Antecedente">
+              <Segmented
+                value={bgFree ? 'livre' : 'antecedente'}
+                onChange={(v) => { setBgFree(v === 'livre'); setBgBonuses({}) }}
+                options={[
+                  { value: 'antecedente', label: 'Habilidades do antecedente' },
+                  { value: 'livre', label: 'Livre (regra da mesa)' },
+                ]}
+              />
+              <p className="muted tiny" style={{ margin: '12px 0 10px' }}>
+                Distribua <strong>+2 e +1</strong> ou <strong>+1, +1 e +1</strong>{' '}
+                {bgFree
+                  ? 'entre quaisquer atributos — use esta opção se o seu mestre não prende os bônus às habilidades do antecedente.'
+                  : `entre as três habilidades de ${bg.name}.`}
+                {' '}Distribuído: {bgTotal}/3.
+              </p>
+              {bgAbilityOptions.map((k) => (
+                <div className="spread" key={k} style={{ marginBottom: 8 }}>
+                  <span>{ABILITY_NAMES[k]}</span>
+                  <div className="segmented" style={{ width: 170 }}>
+                    {[0, 1, 2].map((v) => (
+                      <button
+                        key={v}
+                        className={(bgBonuses[k] ?? 0) === v ? 'on' : ''}
+                        onClick={() => setBgBonuses({ ...bgBonuses, [k]: v })}
+                      >+{v}</button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {!bgOk && <div className="banner warn">O total precisa ser exatamente 3, com no máximo +2 em uma habilidade.</div>}
+            </Card>
+          )}
         </>
       )}
 
       {/* ---------- 3. CLASSE ---------- */}
       {step === 3 && (
         <>
-          {CLASSES.map((c) => (
-            <Choice
-              key={c.id}
-              selected={classId === c.id}
-              title={c.name}
-              desc={`Dado de Vida d${c.hitDie} · ${c.primary} · Salvaguardas: ${c.saves.map((s) => ABILITY_NAMES[s]).join(', ')}`}
-              onClick={() => {
-                setClassId(c.id)
-                setSkillProfs([])
-                setCantrips([])
-                setSpells([])
-                setClassChoices({})
-                setClassEquipId('A')
-              }}
-            />
-          ))}
-          <Card title={`${cls.name} — Nível 1`}>
-            <div className="muted tiny" style={{ marginBottom: 10 }}>
-              <strong className="gold">Armaduras:</strong> {cls.armor.length ? cls.armor.join(', ') : 'Nenhuma'}<br />
-              <strong className="gold">Armas:</strong> {cls.weapons.join(', ')}<br />
-              <strong className="gold">Equipamento inicial:</strong> {cls.startingEquipment}
-            </div>
-            {cls.features.filter((f) => f.level === 1).map((f) => (
-              <div className="feature" key={f.name}>
-                <h4>{f.name}</h4>
-                <p>{f.desc}</p>
-              </div>
+          <Card title="Escolha a classe">
+            {CLASSES.map((c) => (
+              <Choice
+                key={c.id}
+                selected={classId === c.id}
+                title={c.name}
+                desc={`Dado de Vida d${c.hitDie} · ${c.primary} · Salvaguardas: ${c.saves.map((s) => ABILITY_NAMES[s]).join(', ')}`}
+                defaultOpen={classId === c.id}
+                details={
+                  <>
+                    <p><strong className="gold">Armaduras:</strong> {c.armor.length ? c.armor.join(', ') : 'Nenhuma'}</p>
+                    <p><strong className="gold">Armas:</strong> {c.weapons.join(', ')}</p>
+                    <p><strong className="gold">Perícias:</strong> escolha {c.skillCount} entre {c.skillChoices.map((s) => skillById(s).name).join(', ')}</p>
+                    <p><strong className="gold">Equipamento inicial:</strong> {c.startingEquipment}</p>
+                    {c.features.filter((f) => f.level === 1).map((f) => (
+                      <div className="feature" key={f.name}>
+                        <h4>{f.name}</h4>
+                        <p>{f.desc}</p>
+                      </div>
+                    ))}
+                  </>
+                }
+                onClick={() => {
+                  setClassId(c.id)
+                  setSkillProfs([])
+                  setCantrips([])
+                  setSpells([])
+                  setClassChoices({})
+                  setMasteries([])
+                  setClassEquipId('A')
+                }}
+              />
             ))}
           </Card>
 
@@ -365,6 +422,37 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
               onChange={(optionId) => setClassChoices({ ...classChoices, [g.id]: optionId })}
             />
           ))}
+
+          {/* Maestria em Armas — Guerreiro escolhe 3 armas já no nível 1 */}
+          {masteryNeeded > 0 && (
+            <Card title={`Maestria em Armas (${masteries.length}/${masteryNeeded})`}>
+              <p className="muted tiny" style={{ marginBottom: 10 }}>
+                Escolha {masteryNeeded} arma{masteryNeeded > 1 ? 's' : ''} com as quais {cls.name} é proficiente.
+                Você passa a usar a propriedade de maestria dessas armas.
+              </p>
+              {masteryWeapons.map((w) => {
+                const marcada = masteries.includes(w.id)
+                return (
+                  <Choice
+                    key={w.id}
+                    selected={marcada}
+                    title={w.name}
+                    desc={`Maestria: ${w.weapon!.mastery} · ${w.weapon!.damage} ${w.weapon!.damageType} · ${w.weapon!.category}`}
+                    details={
+                      <>
+                        <p><strong className="gold">{w.weapon!.mastery}:</strong> {MASTERY_DESC[w.weapon!.mastery] ?? 'Propriedade de maestria desta arma.'}</p>
+                        {w.weapon!.properties.length > 0 && <p><strong className="gold">Propriedades:</strong> {w.weapon!.properties.join(', ')}</p>}
+                      </>
+                    }
+                    onClick={() => toggle(masteries, setMasteries, w.id, masteryNeeded)}
+                  />
+                )
+              })}
+              {masteries.length !== masteryNeeded && (
+                <div className="banner warn">Escolha exatamente {masteryNeeded} arma{masteryNeeded > 1 ? 's' : ''}.</div>
+              )}
+            </Card>
+          )}
 
           {(cls.choices ?? []).some((g) => (g.level ?? 1) > 1) && (
             <Card title="Escolhas de níveis futuros">
@@ -388,6 +476,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
                 setMethod(m)
                 setScores(emptyScores(m === 'pointbuy' ? 8 : 10))
                 setArrayAssign({})
+                setManualText({})
                 setRolled([])
               }}
               options={[
@@ -476,16 +565,40 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
                     Valores rolados: <strong>{rolled.join(', ')}</strong> — digite-os nos campos abaixo como preferir.
                   </div>
                 )}
-                {ABILITIES.map((k) => (
-                  <div className="spread" key={k} style={{ marginBottom: 8 }}>
-                    <span style={{ width: 110 }}>{ABILITY_NAMES[k]}</span>
-                    <input
-                      type="number" inputMode="numeric" min={3} max={20} style={{ width: 90 }}
-                      value={scores[k]}
-                      onChange={(e) => setScores({ ...scores, [k]: Math.max(3, Math.min(20, Number(e.target.value) || 3)) })}
-                    />
-                  </div>
-                ))}
+                {ABILITIES.map((k) => {
+                  const texto = manualText[k] ?? String(scores[k])
+                  return (
+                    <div className="spread" key={k} style={{ marginBottom: 8 }}>
+                      <span style={{ width: 110 }}>{ABILITY_NAMES[k]}</span>
+                      <input
+                        type="number" inputMode="numeric" min={3} max={20} style={{ width: 90 }}
+                        value={texto}
+                        // Enquanto digita nada é corrigido — a validação acontece ao sair do campo.
+                        onChange={(e) => {
+                          const t = e.target.value
+                          setManualText((p) => ({ ...p, [k]: t }))
+                          const n = Number(t)
+                          if (t.trim() !== '' && Number.isFinite(n)) setScores((s) => ({ ...s, [k]: n }))
+                        }}
+                        onBlur={() => {
+                          const n = Number(manualText[k] ?? scores[k])
+                          const corrigido = Number.isFinite(n) && n !== 0
+                            ? Math.max(3, Math.min(20, Math.trunc(n)))
+                            : Math.max(3, Math.min(20, scores[k])) || 10
+                          setScores((s) => ({ ...s, [k]: corrigido }))
+                          setManualText((p) => ({ ...p, [k]: String(corrigido) }))
+                        }}
+                      />
+                    </div>
+                  )
+                })}
+                {ABILITIES.some((k) => {
+                  const t = manualText[k] ?? String(scores[k])
+                  const n = Number(t)
+                  return t.trim() === '' || !Number.isFinite(n) || n < 3 || n > 20
+                }) && (
+                  <div className="banner warn">Os valores precisam ficar entre 3 e 20 — ajuste antes de continuar.</div>
+                )}
               </>
             )}
           </Card>
@@ -561,15 +674,14 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
               {cantripsNeeded > 0 && (
                 <Card title={`Truques (${cantrips.length}/${cantripsNeeded})`}>
                   {availableCantrips.map((s) => (
-                    <button
+                    <Choice
                       key={s.id}
-                      className={`choice${cantrips.includes(s.id) ? ' on' : ''}`}
+                      selected={cantrips.includes(s.id)}
+                      title={s.name}
+                      desc={`${s.school} · ${s.castingTime} · ${s.range}`}
+                      details={<p>{s.desc}</p>}
                       onClick={() => toggle(cantrips, setCantrips, s.id, cantripsNeeded)}
-                    >
-                      <strong>{cantrips.includes(s.id) ? '✓ ' : ''}{s.name}</strong>
-                      <span>{s.school} · {s.castingTime} · {s.range}</span>
-                      <span>{s.desc}</span>
-                    </button>
+                    />
                   ))}
                 </Card>
               )}
@@ -581,15 +693,14 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
                       : `Você prepara ${spellsNeeded} magia(s) de até ${maxLvl}º nível.`}
                   </p>
                   {availableSpells.map((s) => (
-                    <button
+                    <Choice
                       key={s.id}
-                      className={`choice${spells.includes(s.id) ? ' on' : ''}`}
+                      selected={spells.includes(s.id)}
+                      title={`${s.name} (${s.level}º)`}
+                      desc={`${s.school} · ${s.castingTime} · ${s.range} · ${s.duration}${s.concentration ? ' · Concentração' : ''}`}
+                      details={<p>{s.desc}</p>}
                       onClick={() => toggle(spells, setSpells, s.id, spellsNeeded)}
-                    >
-                      <strong>{spells.includes(s.id) ? '✓ ' : ''}{s.name} <span className="muted">({s.level}º)</span></strong>
-                      <span>{s.school} · {s.castingTime} · {s.range} · {s.duration}{s.concentration ? ' · Concentração' : ''}</span>
-                      <span>{s.desc}</span>
-                    </button>
+                    />
                   ))}
                 </Card>
               )}
@@ -611,22 +722,38 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
                 selected={classEquipId === o.id}
                 title={`Opção ${o.id}`}
                 desc={o.label}
+                defaultOpen={classEquipId === o.id}
+                details={
+                  <>
+                    <p><strong className="gold">Itens:</strong> {listaDeItens(o).join(', ') || 'nenhum'}</p>
+                    <p><strong className="gold">Moedas:</strong> {o.gold} PO</p>
+                  </>
+                }
                 onClick={() => setClassEquipId(o.id)}
               />
             ))}
           </Card>
 
-          <Card title={`Equipamento de ${bg.name}`}>
-            {bg.equipmentOptions.map((o) => (
-              <Choice
-                key={o.id}
-                selected={bgEquipId === o.id}
-                title={`Opção ${o.id}`}
-                desc={o.label}
-                onClick={() => setBgEquipId(o.id)}
-              />
-            ))}
-          </Card>
+          {bg && (
+            <Card title={`Equipamento de ${bg.name}`}>
+              {bg.equipmentOptions.map((o) => (
+                <Choice
+                  key={o.id}
+                  selected={bgEquipId === o.id}
+                  title={`Opção ${o.id}`}
+                  desc={o.label}
+                  defaultOpen={bgEquipId === o.id}
+                  details={
+                    <>
+                      <p><strong className="gold">Itens:</strong> {listaDeItens(o).join(', ') || 'nenhum'}</p>
+                      <p><strong className="gold">Moedas:</strong> {o.gold} PO</p>
+                    </>
+                  }
+                  onClick={() => setBgEquipId(o.id)}
+                />
+              ))}
+            </Card>
+          )}
 
           <Card title="O que vai na sua mochila">
             {classEquip && listaDeItens(classEquip).length > 0 && (
@@ -634,7 +761,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
                 <strong className="gold">{cls.name}:</strong> {listaDeItens(classEquip).join(', ')}
               </div>
             )}
-            {bgEquip && listaDeItens(bgEquip).length > 0 && (
+            {bg && bgEquip && listaDeItens(bgEquip).length > 0 && (
               <div className="muted tiny" style={{ marginBottom: 6 }}>
                 <strong className="gold">{bg.name}:</strong> {listaDeItens(bgEquip).join(', ')}
               </div>

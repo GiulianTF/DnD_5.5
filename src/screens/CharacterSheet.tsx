@@ -3,20 +3,22 @@ import type { Character } from '../types'
 import { classById } from '../data/classes'
 import { speciesById } from '../data/species'
 import { SheetTab } from './tabs/SheetTab'
+import { SkillsTab } from './tabs/SkillsTab'
 import { ActionsTab } from './tabs/ActionsTab'
 import { ItemsTab } from './tabs/ItemsTab'
 import { SpellsTab } from './tabs/SpellsTab'
 import { LevelUpWizard } from './LevelUpWizard'
-import { Card, ChoiceGroup, Sheet } from '../components/ui'
+import { Card, Choice, ChoiceGroup, Sheet } from '../components/ui'
 import { useStore } from '../store/store'
 import { characterChoices } from '../engine/rules'
 import { ORIGIN_FEATS, featById } from '../data/feats'
 import { backgroundById } from '../data/backgrounds'
 
-type Tab = 'ficha' | 'acoes' | 'itens' | 'magias'
+type Tab = 'ficha' | 'pericias' | 'acoes' | 'itens' | 'magias'
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'ficha', label: 'Ficha', icon: '📜' },
+  { id: 'pericias', label: 'Perícias', icon: '🎯' },
   { id: 'acoes', label: 'Ações', icon: '⚔' },
   { id: 'itens', label: 'Itens', icon: '🎒' },
   { id: 'magias', label: 'Magias', icon: '✨' },
@@ -58,7 +60,7 @@ export function CharacterSheet({ char, onBack }: { char: Character; onBack: () =
         </button>
       </div>
 
-      <div className="segmented" style={{ marginBottom: 12 }}>
+      <div className="segmented tabs" style={{ marginBottom: 12 }}>
         {TABS.map((t) => (
           <button key={t.id} className={tab === t.id ? 'on' : ''} onClick={() => setTab(t.id)}>
             {t.icon} {t.label}
@@ -67,6 +69,7 @@ export function CharacterSheet({ char, onBack }: { char: Character; onBack: () =
       </div>
 
       {tab === 'ficha' && <SheetTab char={char} />}
+      {tab === 'pericias' && <SkillsTab char={char} />}
       {tab === 'acoes' && <ActionsTab char={char} />}
       {tab === 'itens' && <ItemsTab char={char} />}
       {tab === 'magias' && <SpellsTab char={char} />}
@@ -118,14 +121,14 @@ export function CharacterSheet({ char, onBack }: { char: Character; onBack: () =
               {ORIGIN_FEATS.map((f) => {
                 const escolhido = (char.originFeats ?? [])[0] === f.id
                 return (
-                  <button
+                  <Choice
                     key={f.id}
-                    className={`choice${escolhido ? ' on' : ''}`}
+                    selected={escolhido}
+                    title={f.name}
+                    details={<p>{f.desc}</p>}
+                    defaultOpen={escolhido}
                     onClick={() => update(char.id, { originFeats: escolhido ? [] : [f.id] })}
-                  >
-                    <strong>{escolhido ? '✓ ' : ''}{f.name}</strong>
-                    <span>{f.desc}</span>
-                  </button>
+                  />
                 )
               })}
               {(char.originFeats ?? []).length === 0 && (

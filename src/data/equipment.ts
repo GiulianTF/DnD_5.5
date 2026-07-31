@@ -20,6 +20,19 @@ const w = (
   }
 }
 
+/** Propriedades de Maestria de Arma do PHB 2024, pelo nome usado no catálogo abaixo. */
+export const MASTERY_DESC: Record<string, string> = {
+  'Ágil': 'O ataque extra da propriedade Leve faz parte da ação Atacar — não consome sua ação Bônus.',
+  'Nick (Golpe Duplo)': 'O ataque extra da propriedade Leve faz parte da ação Atacar — não consome sua ação Bônus.',
+  'Lenta': 'Ao acertar e causar dano, o deslocamento do alvo cai 3 m até o início do seu próximo turno.',
+  'Derrubar': 'Ao acertar, o alvo faz uma salvaguarda de Constituição contra a CD dos seus ataques ou fica Caído.',
+  'Sacrificar (Sap)': 'Ao acertar, o alvo tem desvantagem na próxima jogada de ataque dele antes do seu próximo turno.',
+  'Vex (Provocar)': 'Ao acertar e causar dano, você tem vantagem no seu próximo ataque contra o mesmo alvo.',
+  'Empurrar': 'Ao acertar, você empurra o alvo (Grande ou menor) até 3 m para longe de você.',
+  'Varredura (Cleave)': 'Ao acertar um ataque corpo a corpo, faça um ataque contra uma segunda criatura a até 1,5 m do alvo.',
+  'Enfraquecer (Graze)': 'Se o ataque errar, o alvo ainda sofre dano igual ao seu modificador de habilidade de ataque.',
+}
+
 export const WEAPONS: Item[] = [
   // ---------- Armas Simples (corpo a corpo) ----------
   w('adaga', 'Adaga', 'simples', '1d4', 'Perfurante', 'Ágil', { finesse: true, light: true, thrown: true, range: '6/18 m', properties: ['Acuidade', 'Leve', 'Arremesso (6/18 m)'], cost: '2 PO', weight: 0.5 }),

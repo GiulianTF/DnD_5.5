@@ -298,6 +298,8 @@ label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 5p
 .segmented { display: flex; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 3px; }
 .segmented button { flex: 1; border: none; background: none; min-height: 38px; border-radius: 8px; font-size: .82rem; }
 .segmented button.on { background: var(--red); }
+/* Barra com 5 abas: aperta a fonte para caber em telas estreitas */
+.segmented.tabs button { font-size: .7rem; padding: 0 2px; white-space: nowrap; }
 
 .feature { border-left: 3px solid var(--gold); padding: 4px 0 4px 10px; margin-bottom: 12px; }
 .feature h4 { font-size: .92rem; }
@@ -321,6 +323,45 @@ label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 5p
 .choice.on { border-color: var(--gold); background: #322619; }
 .choice strong { display: block; font-size: .95rem; }
 .choice span { display: block; font-size: .78rem; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+
+/* ---------- Escolha expansível (antecedentes, classes, estilos de luta...) ---------- */
+.choice.expandable { padding: 0; }
+.choice.expandable.disabled { opacity: .45; }
+.choice-head { display: flex; align-items: stretch; }
+.choice-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: none;
+  border: none;
+  border-radius: 10px 0 0 10px;
+  text-align: left;
+  padding: 12px;
+}
+.choice-toggle {
+  flex: 0 0 42px;
+  min-height: 0;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border);
+  border-radius: 0 10px 10px 0;
+  color: var(--muted);
+  font-size: .7rem;
+}
+.choice-details {
+  border-top: 1px solid var(--border);
+  padding: 10px 12px 12px;
+  font-size: .8rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.choice-details p { margin: 0 0 6px; }
+.choice-details p:last-child { margin-bottom: 0; }
+.choice-details strong,
+.choice-details span { display: inline; font-size: inherit; margin-top: 0; }
+.choice-details .feature { margin-bottom: 8px; }
+.choice-details .feature:last-child { margin-bottom: 0; }
+.choice-details .feature h4 { display: block; font-size: .84rem; }
 
 .empty { text-align: center; padding: 40px 16px; color: var(--muted); }
 .empty .big { font-size: 2.6rem; margin-bottom: 8px; }

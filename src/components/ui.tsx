@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { OptionGroup } from '../types'
 
 export function Sheet({ title, onClose, children, footer }: {
@@ -61,17 +61,50 @@ export function Segmented<T extends string>({ value, options, onChange }: {
   )
 }
 
-export function Choice({ selected, title, desc, onClick }: {
+/**
+ * Item de escolha. Quando recebe `details`, vira um item expansível: selecionar
+ * abre o detalhe e a setinha permite abrir/fechar sem mudar a seleção.
+ */
+export function Choice({ selected, title, desc, onClick, details, disabled, defaultOpen = false }: {
   selected: boolean
   title: string
-  desc?: string
+  desc?: ReactNode
   onClick: () => void
+  details?: ReactNode
+  disabled?: boolean
+  defaultOpen?: boolean
 }) {
+  const [open, setOpen] = useState(defaultOpen)
+
+  if (!details) {
+    return (
+      <button className={`choice${selected ? ' on' : ''}`} onClick={onClick} disabled={disabled}>
+        <strong>{selected ? '✓ ' : ''}{title}</strong>
+        {desc && <span>{desc}</span>}
+      </button>
+    )
+  }
+
   return (
-    <button className={`choice${selected ? ' on' : ''}`} onClick={onClick}>
-      <strong>{selected ? '✓ ' : ''}{title}</strong>
-      {desc && <span>{desc}</span>}
-    </button>
+    <div className={`choice expandable${selected ? ' on' : ''}${disabled ? ' disabled' : ''}`}>
+      <div className="choice-head">
+        <button
+          className="choice-main"
+          disabled={disabled}
+          onClick={() => { onClick(); setOpen(true) }}
+        >
+          <strong>{selected ? '✓ ' : ''}{title}</strong>
+          {desc && <span>{desc}</span>}
+        </button>
+        <button
+          className="choice-toggle"
+          aria-expanded={open}
+          aria-label={open ? 'Recolher detalhes' : 'Ver detalhes'}
+          onClick={() => setOpen((v) => !v)}
+        >{open ? '▲' : '▼'}</button>
+      </div>
+      {open && <div className="choice-details">{details}</div>}
+    </div>
   )
 }
 
@@ -86,7 +119,14 @@ export function ChoiceGroup({ group, value, onChange, aviso = true }: {
     <Card title={group.name}>
       {group.desc && <p className="muted tiny" style={{ marginBottom: 10 }}>{group.desc}</p>}
       {group.options.map((o) => (
-        <Choice key={o.id} selected={value === o.id} title={o.name} desc={o.desc} onClick={() => onChange(o.id)} />
+        <Choice
+          key={o.id}
+          selected={value === o.id}
+          title={o.name}
+          details={<p>{o.desc}</p>}
+          defaultOpen={value === o.id}
+          onClick={() => onChange(o.id)}
+        />
       ))}
       {aviso && !value && <div className="banner warn">Escolha uma opção para continuar.</div>}
     </Card>

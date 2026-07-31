@@ -109,6 +109,7 @@ export const CLASSES: DndClass[] = [
       epicBoon(),
       { level: 20, name: 'Campeão Primal', desc: 'FOR e CON aumentam em +4 (máximo 25).' },
     ],
+    masteryCount: (lv) => (lv >= 10 ? 4 : lv >= 4 ? 3 : 2),
     resources: [
       { id: 'furia', name: 'Fúria', fromLevel: 1, recharge: 'longo', max: (lv) => (lv >= 17 ? 6 : lv >= 12 ? 5 : lv >= 6 ? 4 : lv >= 3 ? 3 : 2) },
     ],
@@ -278,7 +279,7 @@ export const CLASSES: DndClass[] = [
       { level: 20, name: 'Intervenção Divina Maior', desc: 'Sua Intervenção Divina pode conjurar Desejo (recarrega em 2d4 descansos longos).' },
     ],
     resources: [
-      { id: 'canalizar-divindade', name: 'Canalizar Divindade', fromLevel: 2, recharge: 'curto', max: (lv) => (lv >= 18 ? 4 : lv >= 6 ? 3 : 2) },
+      { id: 'canalizar-divindade', name: 'Canalizar Divindade', fromLevel: 2, recharge: 'longo', shortRestUses: 1, max: (lv) => (lv >= 18 ? 4 : lv >= 6 ? 3 : 2) },
       { id: 'intervencao-divina', name: 'Intervenção Divina', fromLevel: 10, recharge: 'longo', max: () => 1 },
     ],
     subclasses: [
@@ -366,7 +367,7 @@ export const CLASSES: DndClass[] = [
       { level: 20, name: 'Arquidruida', desc: 'Recupere Forma Selvagem ao rolar Iniciativa; converta usos em espaços de magia.' },
     ],
     resources: [
-      { id: 'forma-selvagem', name: 'Forma Selvagem', fromLevel: 2, recharge: 'curto', max: (lv) => (lv >= 17 ? 4 : lv >= 6 ? 3 : 2) },
+      { id: 'forma-selvagem', name: 'Forma Selvagem', fromLevel: 2, recharge: 'longo', shortRestUses: 1, max: (lv) => (lv >= 17 ? 4 : lv >= 6 ? 3 : 2) },
     ],
     subclasses: [
       sub('terra', 'Círculo da Terra', 'Magia da terra: florestas, desertos, montanhas.', [
@@ -452,8 +453,9 @@ export const CLASSES: DndClass[] = [
       epicBoon(),
       { level: 20, name: 'Três Ataques Extras', desc: 'Ataque quatro vezes com a ação Atacar.' },
     ],
+    masteryCount: (lv) => (lv >= 16 ? 6 : lv >= 10 ? 5 : lv >= 4 ? 4 : 3),
     resources: [
-      { id: 'retomar-folego', name: 'Retomar o Fôlego', fromLevel: 1, recharge: 'longo', max: (lv) => (lv >= 10 ? 4 : lv >= 4 ? 3 : 2) },
+      { id: 'retomar-folego', name: 'Retomar o Fôlego', fromLevel: 1, recharge: 'longo', shortRestUses: 1, max: (lv) => (lv >= 10 ? 4 : lv >= 4 ? 3 : 2) },
       { id: 'surto-de-acao', name: 'Surto de Ação', fromLevel: 2, recharge: 'curto', max: (lv) => (lv >= 17 ? 2 : 1) },
       { id: 'indomavel', name: 'Indomável', fromLevel: 9, recharge: 'longo', max: (lv) => (lv >= 17 ? 3 : lv >= 13 ? 2 : 1) },
     ],
@@ -593,6 +595,7 @@ export const CLASSES: DndClass[] = [
       soOuro(150),
     ],
     choices: [estiloDeLuta(2, ['estilo-combatente-abencoado'])],
+    masteryCount: (lv) => (lv >= 4 ? 3 : 2),
     features: [
       { level: 1, name: 'Impor as Mãos', desc: 'Reserva de cura = 5 × nível de Paladino. Bônus: cure PV ou remova a condição Envenenado (custo 5).' },
       { level: 1, name: 'Conjuração', desc: 'Você conjura magias de Paladino usando Carisma.' },
@@ -619,7 +622,7 @@ export const CLASSES: DndClass[] = [
       { level: 20, name: 'Característica de Subclasse (Ápice)', desc: 'A transformação máxima do seu Juramento.' },
     ],
     resources: [
-      { id: 'canalizar-divindade-paladino', name: 'Canalizar Divindade', fromLevel: 3, recharge: 'curto', max: (lv) => (lv >= 11 ? 3 : 2) },
+      { id: 'canalizar-divindade-paladino', name: 'Canalizar Divindade', fromLevel: 3, recharge: 'longo', shortRestUses: 1, max: (lv) => (lv >= 11 ? 3 : 2) },
       { id: 'impor-as-maos', name: 'Impor as Mãos (PV na reserva)', fromLevel: 1, recharge: 'longo', max: (lv) => lv * 5 },
     ],
     subclasses: [
@@ -674,6 +677,7 @@ export const CLASSES: DndClass[] = [
       soOuro(150),
     ],
     choices: [estiloDeLuta(2, ['estilo-guerreiro-druidico'])],
+    masteryCount: (lv) => (lv >= 4 ? 3 : 2),
     features: [
       { level: 1, name: 'Conjuração', desc: 'Você conjura magias de Patrulheiro usando Sabedoria.' },
       { level: 1, name: 'Inimigo Favorito', desc: 'Marca do Caçador sempre preparada; conjure sem gastar espaço (usos aumentam com o nível).' },
@@ -780,6 +784,7 @@ export const CLASSES: DndClass[] = [
       epicBoon(),
       { level: 20, name: 'Golpe de Sorte', desc: '1×/descanso curto, transforme um ataque errado em acerto ou uma falha em 20 natural.' },
     ],
+    masteryCount: (lv) => (lv >= 4 ? 3 : 2),
     resources: [
       { id: 'golpe-de-sorte', name: 'Golpe de Sorte', fromLevel: 20, recharge: 'curto', max: () => 1 },
     ],

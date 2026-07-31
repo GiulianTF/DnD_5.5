@@ -9,6 +9,7 @@ import { CharacterList } from './screens/CharacterList'
 import { CloudTab } from './screens/CloudTab'
 import { LevelUpWizard } from './screens/LevelUpWizard'
 import { SheetTab } from './screens/tabs/SheetTab'
+import { SkillsTab } from './screens/tabs/SkillsTab'
 import { ActionsTab } from './screens/tabs/ActionsTab'
 import { ItemsTab } from './screens/tabs/ItemsTab'
 import { SpellsTab } from './screens/tabs/SpellsTab'
@@ -87,6 +88,7 @@ tenta('DiceRollerSheet', () => renderToString(<DiceRollerSheet onClose={() => {}
 console.log('\n== Ficha completa (guerreiro nv12) ==')
 tenta('CharacterSheet', () => renderToString(<CharacterSheet char={guerreiro} onBack={() => {}} />))
 tenta('SheetTab', () => renderToString(<SheetTab char={guerreiro} />))
+tenta('SkillsTab (pericias e proficiencias)', () => renderToString(<SkillsTab char={guerreiro} />))
 tenta('ActionsTab', () => renderToString(<ActionsTab char={guerreiro} />))
 tenta('ItemsTab', () => renderToString(<ItemsTab char={guerreiro} />))
 tenta('SpellsTab (nao conjurador)', () => renderToString(<SpellsTab char={guerreiro} />))
@@ -145,6 +147,7 @@ for (const c of CLASSES) {
     })
     try {
       renderToString(<SheetTab char={ch} />)
+      renderToString(<SkillsTab char={ch} />)
       renderToString(<ActionsTab char={ch} />)
       renderToString(<ItemsTab char={ch} />)
       renderToString(<SpellsTab char={ch} />)
