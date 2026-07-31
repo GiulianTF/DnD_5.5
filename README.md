@@ -96,15 +96,24 @@ geral. Equipar uma armadura ou escudo recalcula a Classe de Armadura respeitando
 Destreza da categoria; equipar uma arma cria a entrada na aba **Ações** com o bônus de ataque
 (atributo + proficiência + bônus mágico) e a rolagem de dano com o tipo correto.
 
-**Itens mágicos com bônus dinâmicos** — armas e armaduras podem receber +1, +2 ou +3, que entram
-automaticamente no ataque, no dano e na CA. O catálogo traz Anel de Proteção, Braçadeiras de Defesa
-(que só valem sem armadura), Manto de Proteção, Pedra da Boa Sorte e itens que substituem atributos,
-como o Amuleto da Saúde (CON 19) e os Cinturões de Força do Gigante — estes recalculam o modificador,
-as salvaguardas e os Pontos de Vida máximos. A sintonização é controlada com o limite de 3 itens.
+**Itens mágicos — catálogo completo do Livro do Mestre 2024** — os mais de 340 itens do capítulo de
+Tesouro, do Comum ao Artefato, com categoria, raridade, exigência de sintonização e o texto de regras
+de cada um. O catálogo é agrupado por raridade e tem busca por nome. Os bônus numéricos entram
+automaticamente na ficha: armas e armaduras +1/+2/+3 no ataque, no dano e na CA; Anel de Proteção e
+Manto de Proteção na CA e nas salvaguardas; Braçadeiras de Defesa só sem armadura; e itens que
+substituem atributos, como o Amuleto da Saúde (CON 19) e os Cinturões de Força do Gigante, que
+recalculam o modificador, as salvaguardas e os Pontos de Vida máximos. A sintonização é controlada
+com o limite de 3 itens.
 
-**Magias e espaços** — catálogo em PT-BR do truque ao 9º nível, com escola, tempo de conjuração,
-alcance, componentes, duração, concentração e ritual. Rastreador visual de espaços por nível, com
-espaços de Pacto separados para o Bruxo.
+**Magias — catálogo completo do Livro do Jogador 2024** — as 391 magias do capítulo 7, do truque ao
+9º círculo, de todas as classes conjuradoras, com **a descrição integral do livro** (sem resumos),
+escola, tempo de conjuração, alcance, componentes, duração, concentração e ritual. Rastreador visual
+de espaços por nível, com espaços de Pacto separados para o Bruxo.
+
+**Toda escolha de magia em um lugar só** — o que concede magia fora da lista da classe (linhagem
+élfica, Iniciado em Magia, Tocado pelo Feérico, Combatente Abençoado, Guerreiro Druídico...) pede a
+escolha no **passo de Magias**, junto com os truques e as magias da classe, e não espalhada pelos
+passos de espécie e de classe. As magias fixas concedidas por traços aparecem ali listadas também.
 
 **Recursos limitados e descansos** — Fúria, Retomar o Fôlego, Surto de Ação, Inspiração de Bardo,
 Canalizar Divindade, Forma Selvagem, Pontos de Foco e outros aparecem com contador de usos e marca de
@@ -123,7 +132,8 @@ passa a rolar o crítico com os dados dobrados.
 
 ```
 src/
-  data/        Conteúdo do PHB 2024 em PT-BR (espécies, antecedentes, classes, magias, itens, talentos)
+  data/        Conteúdo em PT-BR: espécies, antecedentes, classes, talentos, equipamento,
+               spells.ts (391 magias do PHB) e magic-items.ts (itens mágicos do Livro do Mestre)
   engine/      Regras puras: CA, PV, ataques, espaços de magia, recursos, evolução, dados
   store/       Estado global com persistência em localStorage e sincronização Supabase
   screens/     Telas: lista, criação, ficha (abas), evolução, nuvem
@@ -150,11 +160,18 @@ testáveis fora do navegador e fáceis de conferir contra o livro.
 
 ## Observações sobre o conteúdo
 
-O texto das regras foi resumido e traduzido para orientar o jogo na mesa; ele não substitui o Livro
-do Jogador. Alguns pontos são simplificações deliberadas, para manter o app utilizável:
+As **magias** trazem a descrição integral do Livro do Jogador 2024 — `src/data/spells.ts` é gerado a
+partir de `regras/livro-jogador.pdf` e não deve ser editado à mão. Os **itens mágicos**
+(`src/data/magic-items.ts`) trazem o texto de regras do Livro do Mestre 2024 traduzido para PT-BR.
+Ainda assim, o app não substitui os livros. Alguns pontos são simplificações deliberadas:
 
 - Multiclasse não é suportada — cada ficha tem uma classe.
 - As características de subclasse aparecem resumidas, com o efeito principal.
 - Itens mágicos com efeitos condicionais complexos são descritos em texto; o app calcula
   automaticamente apenas os bônus numéricos (ataque, dano, CA, salvaguardas e substituição de
   atributo).
+- Itens de raridade variável (armas +1/+2/+3, Cinturão de Força do Gigante, Pedra Ioun...) trazem a
+  tabela completa no texto, mas o cálculo automático usa a variante mais comum; ajuste o bônus na
+  aba Itens quando a mesa usar outra.
+- O talento **Iniciado em Magia** oferece a união das listas de Clérigo, Druida e Mago; a regra do
+  livro pede que os três feitiços saiam da mesma lista, e o aviso na tela lembra disso.

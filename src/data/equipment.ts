@@ -1,4 +1,8 @@
 import type { Item } from '../types'
+import { MAGIC_ITEMS } from './magic-items'
+
+/** O catálogo do Livro do Mestre vive em `magic-items.ts`; aqui só o reexportamos. */
+export { MAGIC_ITEMS } from './magic-items'
 
 const w = (
   id: string,
@@ -108,7 +112,6 @@ export const GEAR: Item[] = [
   { id: 'racao', name: 'Rações de Viagem (1 dia)', kind: 'equipamento', cost: '5 PP', weight: 1 },
   { id: 'cantil', name: 'Cantil', kind: 'equipamento', cost: '2 PP', weight: 2.5 },
   { id: 'kit-curandeiro', name: 'Kit de Curandeiro', kind: 'equipamento', cost: '5 PO', weight: 1.5, desc: 'Estabiliza uma criatura a 0 PV sem teste (10 usos).' },
-  { id: 'pocao-de-cura', name: 'Poção de Cura', kind: 'equipamento', cost: '50 PO', weight: 0.25, desc: 'Ação Bônus: recupere 2d4+2 PV.' },
   { id: 'ferramentas-de-ladrao', name: 'Ferramentas de Ladrão', kind: 'equipamento', cost: '25 PO', weight: 0.5 },
   { id: 'simbolo-sagrado', name: 'Símbolo Sagrado', kind: 'equipamento', cost: '5 PO', weight: 0.5 },
   { id: 'foco-arcano', name: 'Foco Arcano', kind: 'equipamento', cost: '10 PO', weight: 1 },
@@ -159,62 +162,17 @@ export const GEAR: Item[] = [
   { id: 'apito', name: 'Apito', kind: 'equipamento', cost: '5 PC', weight: 0 },
 ]
 
-export const MAGIC_ITEMS: Item[] = [
-  {
-    id: 'anel-de-protecao',
-    name: 'Anel de Proteção',
-    kind: 'magico',
-    magic: { acBonus: 1, saveBonus: 1, attunement: true, desc: '+1 na CA e em todas as salvaguardas. Requer sintonização.' },
-  },
-  {
-    id: 'bracadeiras-de-defesa',
-    name: 'Braçadeiras de Defesa',
-    kind: 'magico',
-    magic: { acBonus: 2, requiresNoArmor: true, attunement: true, desc: '+2 na CA enquanto não usar armadura nem escudo. Requer sintonização.' },
-  },
-  {
-    id: 'amuleto-da-saude',
-    name: 'Amuleto da Saúde',
-    kind: 'magico',
-    magic: { setAbility: { con: 19 }, attunement: true, desc: 'Sua Constituição passa a ser 19 enquanto usar o amuleto. Requer sintonização.' },
-  },
-  {
-    id: 'manoplas-de-forca-do-ogro',
-    name: 'Manoplas da Força do Ogro',
-    kind: 'magico',
-    magic: { setAbility: { for: 19 }, attunement: true, desc: 'Sua Força passa a ser 19 enquanto usar as manoplas. Requer sintonização.' },
-  },
-  {
-    id: 'cinto-de-forca-do-gigante-da-colina',
-    name: 'Cinturão de Força do Gigante da Colina',
-    kind: 'magico',
-    magic: { setAbility: { for: 21 }, attunement: true, desc: 'Sua Força passa a ser 21 enquanto usar o cinturão. Requer sintonização.' },
-  },
-  {
-    id: 'cinto-de-forca-do-gigante-do-fogo',
-    name: 'Cinturão de Força do Gigante do Fogo',
-    kind: 'magico',
-    magic: { setAbility: { for: 25 }, attunement: true, desc: 'Sua Força passa a ser 25 enquanto usar o cinturão. Requer sintonização.' },
-  },
-  {
-    id: 'pedra-da-boa-sorte',
-    name: 'Pedra da Boa Sorte',
-    kind: 'magico',
-    magic: { saveBonus: 1, attunement: true, desc: '+1 em salvaguardas e testes de habilidade enquanto carregar a pedra. Requer sintonização.' },
-  },
-  {
-    id: 'manto-de-protecao',
-    name: 'Manto de Proteção',
-    kind: 'magico',
-    magic: { acBonus: 1, saveBonus: 1, attunement: true, desc: '+1 na CA e em salvaguardas. Requer sintonização.' },
-  },
-  {
-    id: 'amuleto-de-escudo-contra-magias',
-    name: 'Amuleto de Proteção contra Magias',
-    kind: 'magico',
-    magic: { saveBonus: 2, attunement: true, desc: '+2 em salvaguardas contra magias. (Simplificado: +2 em salvaguardas.) Requer sintonização.' },
-  },
-]
-
 export const ALL_ITEMS: Item[] = [...WEAPONS, ...ARMORS, SHIELD, ...GEAR, ...MAGIC_ITEMS]
-export const itemById = (id: string) => ALL_ITEMS.find((i) => i.id === id)
+
+/**
+ * Ids usados pelas fichas criadas antes do catálogo completo do Livro do Mestre.
+ * Sem isso, um item já guardado na mochila sumiria da ficha.
+ */
+export const ITEM_ALIASES: Record<string, string> = {
+  'cinto-de-forca-do-gigante-da-colina': 'cinturao-de-forca-do-gigante',
+  'cinto-de-forca-do-gigante-do-fogo': 'cinturao-de-forca-do-gigante',
+  'amuleto-de-escudo-contra-magias': 'amuleto-contra-deteccao-e-localizacao',
+}
+
+export const itemById = (id: string) =>
+  ALL_ITEMS.find((i) => i.id === id) ?? ALL_ITEMS.find((i) => i.id === ITEM_ALIASES[id])

@@ -1,6 +1,6 @@
 import type {
   AbilityKey, AbilityScores, Character, ChoiceOption, InnateSpell, Item, InventoryEntry,
-  OptionGroup, Spell,
+  OptionGroup, Spell, SpellPick,
 } from '../types'
 import { ABILITIES } from '../types'
 import { classById, FULL_CASTER_SLOTS, HALF_CASTER_SLOTS, PACT_SLOTS } from '../data/classes'
@@ -8,7 +8,7 @@ import { speciesById } from '../data/species'
 import { backgroundById } from '../data/backgrounds'
 import { WEAPONS, itemById } from '../data/equipment'
 import { SKILLS } from '../data/skills'
-import { spellById } from '../data/spells'
+import { SPELLS, spellById } from '../data/spells'
 import { featById } from '../data/feats'
 
 export const abilityMod = (score: number) => Math.floor((score - 10) / 2)
@@ -344,10 +344,18 @@ export function preparedLimit(char: Character): number | null {
   return cls.preparedByLevel[Math.min(20, char.level) - 1]
 }
 
+/** Opções de classe que concedem um truque extra da própria lista da classe. */
+const TRUQUE_EXTRA_DE_CLASSE = ['taumaturgo', 'mago-primal']
+
 export function cantripLimit(char: Character): number {
   const cls = classById(char.classId)
   if (!cls?.cantripsByLevel) return 0
-  return cls.cantripsByLevel[Math.min(20, char.level) - 1]
+  const base = cls.cantripsByLevel[Math.min(20, char.level) - 1]
+  // Ordem Divina (Taumaturgo) e Ordem Primal (Mago Primal) dão mais um truque.
+  const extra = characterChoices(char).some(
+    (c) => c.source === 'classe' && c.chosen && TRUQUE_EXTRA_DE_CLASSE.includes(c.chosen.id),
+  ) ? 1 : 0
+  return base + extra
 }
 
 // ---------- Magias concedidas pela espécie ----------
@@ -370,21 +378,90 @@ export function innateUsesLabel(char: Character, freeUses?: InnateSpell['freeUse
   return ''
 }
 
+// ---------- Magias escolhidas fora da lista da classe ----------
+/** Um grupo de escolha de magias (espécie, talento, estilo de luta) já resolvido. */
+export interface ResolvedSpellPick {
+  pick: SpellPick
+  /** magias do catálogo que satisfazem o filtro do grupo */
+  options: Spell[]
+  /** ids já escolhidos na ficha */
+  chosen: string[]
+  /** ainda faltam escolhas neste grupo */
+  pending: boolean
+}
+
 /**
- * Truques e magias que a espécie (e a linhagem escolhida) concedem no nível atual.
- * Valem para qualquer classe — inclusive para quem não conjura, como o Guerreiro.
+ * Todos os grupos de "escolha uma magia" que NÃO vêm da lista da classe:
+ * linhagens de espécie, talentos de origem, talentos gerais e Estilos de Luta.
+ * O assistente de criação e o de evolução mostram todos eles junto das magias
+ * da classe, para o jogador nunca precisar caçar a escolha em outro passo.
+ */
+export function spellPickGroups(
+  char: Character,
+  opts: { uptoLevel?: number; extraFeatIds?: string[] } = {},
+): ResolvedSpellPick[] {
+  const uptoLevel = opts.uptoLevel ?? char.level
+  const picks: SpellPick[] = []
+
+  const sp = speciesById(char.speciesId)
+  if (sp?.spellPicks) picks.push(...sp.spellPicks)
+  for (const { chosen } of characterChoices(char, uptoLevel)) {
+    if (chosen?.spellPicks) picks.push(...chosen.spellPicks)
+  }
+  for (const id of [...allFeatIds(char), ...(opts.extraFeatIds ?? [])]) {
+    const feat = featById(id)
+    if (feat?.spellPicks) picks.push(...feat.spellPicks)
+  }
+
+  const vistos = new Set<string>()
+  return picks
+    .filter((p) => p.level <= uptoLevel && !vistos.has(p.id) && vistos.add(p.id) !== undefined)
+    .map((pick) => {
+      const options = SPELLS.filter(
+        (s) => s.level === pick.spellLevel
+          && s.classes.some((c) => pick.fromClasses.includes(c))
+          && (!pick.schools || pick.schools.includes(s.school)),
+      )
+      const chosen = (char.spellPicks?.[pick.id] ?? []).filter((id) => options.some((o) => o.id === id))
+      return { pick, options, chosen, pending: chosen.length < pick.count }
+    })
+}
+
+/** Magias fixas concedidas por talentos (Passo Nebuloso do Tocado pelo Feérico). */
+function featInnateSpells(char: Character): { lista: InnateSpell[]; source: string }[] {
+  const out: { lista: InnateSpell[]; source: string }[] = []
+  for (const id of allFeatIds(char)) {
+    const feat = featById(id)
+    if (feat?.innateSpells?.length) out.push({ lista: feat.innateSpells, source: feat.name })
+  }
+  return out
+}
+
+/**
+ * Truques e magias que vêm de fora da lista da classe no nível atual: traços da
+ * espécie, linhagem escolhida, talentos e as magias escolhidas nos grupos de
+ * escolha. Valem para qualquer classe — inclusive quem não conjura, como o Guerreiro.
  */
 export function innateSpells(char: Character): ResolvedInnateSpell[] {
   const sp = speciesById(char.speciesId)
-  if (!sp) return []
   const pb = proficiencyBonus(char.level)
   const mods = abilityMods(char)
 
   const fontes: { lista: InnateSpell[]; source: string }[] = []
-  if (sp.innateSpells?.length) fontes.push({ lista: sp.innateSpells, source: sp.name })
+  if (sp?.innateSpells?.length) fontes.push({ lista: sp.innateSpells, source: sp.name })
   for (const { source, group, chosen } of characterChoices(char)) {
     if (source !== 'especie' || !chosen?.innateSpells?.length) continue
     fontes.push({ lista: chosen.innateSpells, source: `${group.name}: ${chosen.name}` })
+  }
+  fontes.push(...featInnateSpells(char))
+  // As magias escolhidas nos grupos entram como se fossem concedidas pela fonte.
+  for (const { pick, chosen } of spellPickGroups(char)) {
+    fontes.push({
+      source: pick.source,
+      lista: chosen.map((spellId) => ({
+        spellId, level: pick.level, abilities: pick.abilities, freeUses: pick.freeUses, nota: pick.nota,
+      })),
+    })
   }
 
   const out: ResolvedInnateSpell[] = []

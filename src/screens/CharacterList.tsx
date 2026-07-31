@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { useStore } from '../store/store'
+import { useAuth } from '../store/auth'
 import { classById } from '../data/classes'
 import { speciesById } from '../data/species'
 import { currentHp, maxHp, armorClass } from '../engine/rules'
@@ -8,9 +9,25 @@ import { Card, Empty } from '../components/ui'
 
 export function CharacterList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: string) => void }) {
   const { characters, setActive, deleteCharacter, replaceAll } = useStore()
+  const { session, signOut, setOffline } = useAuth()
   const fileRef = useRef<HTMLInputElement>(null)
 
   const abrir = (id: string) => { setActive(id); onOpen(id) }
+
+  /*
+   * Voltar para a tela de login: quem está em uma conta sai dela; quem escolheu
+   * "usar sem conta" apenas desfaz essa escolha. Em ambos os casos as fichas
+   * continuam salvas neste aparelho.
+   */
+  const voltarAoLogin = async () => {
+    const aviso = session
+      ? 'Sair da conta e voltar para a tela de login? Suas fichas continuam salvas neste aparelho.'
+      : 'Voltar para a tela de login? Suas fichas continuam salvas neste aparelho.'
+    if (!confirm(aviso)) return
+    setActive(null)
+    if (session) await signOut()
+    setOffline(false)
+  }
 
   const importar = async (file: File) => {
     try {
@@ -32,8 +49,13 @@ export function CharacterList({ onNew, onOpen }: { onNew: () => void; onOpen: (i
       <div className="topbar">
         <div style={{ flex: 1 }}>
           <h1>Minhas Fichas</h1>
-          <div className="sub">D&D 5ª Edição · Livro do Jogador 2024</div>
+          <div className="sub">
+            {session?.user?.email ?? 'Usando sem conta'} · Livro do Jogador 2024
+          </div>
         </div>
+        <button className="sm ghost" onClick={voltarAoLogin} title="Voltar para a tela de login">
+          {session ? '⎋ Sair' : '⎋ Login'}
+        </button>
       </div>
 
       <button className="primary" style={{ width: '100%', marginBottom: 14 }} onClick={onNew}>

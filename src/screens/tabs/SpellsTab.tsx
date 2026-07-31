@@ -9,7 +9,7 @@ import {
 } from '../../engine/rules'
 import { speciesById } from '../../data/species'
 import { useStore } from '../../store/store'
-import { Card, Empty, Sheet } from '../../components/ui'
+import { Card, Empty, Sheet, SpellText } from '../../components/ui'
 
 const ORDINAIS = ['Truques', '1º Nível', '2º Nível', '3º Nível', '4º Nível', '5º Nível', '6º Nível', '7º Nível', '8º Nível', '9º Nível']
 
@@ -303,7 +303,7 @@ function DetalheMagia({ id, onClose, onAdd }: { id: string; onClose: () => void;
         {s.concentration && <><br /><strong className="gold">Requer Concentração</strong></>}
         {s.ritual && <><br /><strong className="gold">Pode ser conjurada como Ritual</strong></>}
       </div>
-      <p style={{ lineHeight: 1.6, fontSize: '.9rem' }}>{s.desc}</p>
+      <SpellText desc={s.desc} />
       <div className="tiny muted" style={{ marginTop: 10 }}>Classes: {s.classes.map((c) => classById(c)?.name ?? c).join(', ')}</div>
       {onAdd && (
         <button className="primary" style={{ width: '100%', marginTop: 12 }} onClick={onAdd}>

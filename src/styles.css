@@ -364,6 +364,10 @@ hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
 
 .spell-lvl { font-size: .78rem; color: var(--gold); margin: 14px 0 6px; font-weight: 600; letter-spacing: .03em; }
 
+/* Descrição integral das magias: parágrafos do Livro do Jogador. */
+.spell-p { font-size: .88rem; line-height: 1.6; margin: 0 0 .7em; }
+.spell-p:last-child { margin-bottom: 0; }
+
 details summary { cursor: pointer; padding: 6px 0; font-size: .88rem; }
 details[open] summary { color: var(--gold); }
 

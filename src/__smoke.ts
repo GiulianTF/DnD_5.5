@@ -1,18 +1,19 @@
 // Teste de fumaça das regras. Executado via esbuild + node; não faz parte do app.
 import type { Character } from './types'
+import { RARITY_NAMES, RARITY_ORDER } from './types'
 import { newCharacter, normalizeCharacter } from './store/store'
 import {
   armorClass, attackActions, characterFeats, maxHp, spellSlots, pactSlots, preparedLimit, cantripLimit,
   characterResources, innateSpells, levelUpSummary, finalAbilities, pendingChoices, saves, skillValues,
-  speciesLabel, spellcasting,
+  speciesLabel, spellcasting, spellPickGroups,
 } from './engine/rules'
 import { pagar, parseCost, purseInCopper } from './engine/money'
 import { CLASSES } from './data/classes'
 import { SPECIES } from './data/species'
 import { SPELLS, spellById } from './data/spells'
 import { BACKGROUNDS } from './data/backgrounds'
-import { ALL_ITEMS, itemById } from './data/equipment'
-import { featById } from './data/feats'
+import { ALL_ITEMS, MAGIC_ITEMS, itemById } from './data/equipment'
+import { FEATS, featById } from './data/feats'
 import { skillById } from './data/skills'
 
 // Roda no Node via scripts/run-tests.cjs; o projeto não depende de @types/node.
@@ -218,7 +219,7 @@ const drowGuerreiro: Character = newCharacter({
   hpRolls: [null, null, null, null],
 })
 const inatasDrow = innateSpells(drowGuerreiro)
-ok(inatasDrow.some((m) => m.spell.id === 'globos-de-luz'), 'guerreiro drow recebe o truque Globos de Luz')
+ok(inatasDrow.some((m) => m.spell.id === 'luzes-dancantes'), 'guerreiro drow recebe o truque Luzes Dancantes')
 ok(inatasDrow.some((m) => m.spell.id === 'fogo-das-fadas'), 'drow nivel 5 ja tem Fogo das Fadas (nivel 3)')
 ok(inatasDrow.some((m) => m.spell.id === 'escuridao'), 'drow nivel 5 ja tem Escuridao')
 ok(innateSpells({ ...drowGuerreiro, level: 1 }).length === 1, 'no nivel 1 o drow so tem o truque')
@@ -234,6 +235,92 @@ for (const s of SPECIES) {
     }
   }
 }
+
+console.log('\n== Magias escolhidas fora da lista da classe ==')
+// Alto Elfo escolhe um truque de Mago; a escolha aparece no passo de Magias.
+const altoElfo: Character = newCharacter({
+  classId: 'guerreiro', speciesId: 'elfo', backgroundId: 'soldado',
+  speciesChoices: { 'linhagem-elfica': 'alto-elfo', 'sentidos-agucados': 'percepcao' },
+})
+const gruposAltoElfo = spellPickGroups(altoElfo)
+const truqueAltoElfo = gruposAltoElfo.find((g) => g.pick.id === 'alto-elfo-truque')
+ok(!!truqueAltoElfo, 'alto elfo tem um grupo de escolha de truque')
+ok(truqueAltoElfo!.pending, 'a escolha comeca pendente')
+ok(truqueAltoElfo!.options.length > 0 && truqueAltoElfo!.options.every((s) => s.level === 0 && s.classes.includes('mago')),
+  `so oferece truques de Mago (${truqueAltoElfo!.options.length} opcoes)`)
+const altoElfoEscolhido: Character = { ...altoElfo, spellPicks: { 'alto-elfo-truque': ['raio-de-fogo'] } }
+ok(!spellPickGroups(altoElfoEscolhido)[0].pending, 'depois de escolher, o grupo deixa de estar pendente')
+ok(innateSpells(altoElfoEscolhido).some((m) => m.spell.id === 'raio-de-fogo'),
+  'o truque escolhido aparece nas magias do personagem')
+
+// Iniciado em Magia (talento de origem) tambem escolhe no passo de Magias.
+const iniciado: Character = newCharacter({
+  classId: 'barbaro', speciesId: 'humano', backgroundId: 'soldado', originFeats: ['iniciado-em-magia'],
+})
+const gruposIniciado = spellPickGroups(iniciado)
+ok(gruposIniciado.length === 2, `Iniciado em Magia abre 2 grupos (${gruposIniciado.length})`)
+ok(gruposIniciado[0].pick.count === 2 && gruposIniciado[0].pick.spellLevel === 0, '2 truques')
+ok(gruposIniciado[1].pick.count === 1 && gruposIniciado[1].pick.spellLevel === 1, '1 magia de 1o circulo')
+
+// Estilo de Luta Combatente Abencoado (Paladino, nivel 2): 2 truques de Clerigo.
+const abencoado: Character = newCharacter({
+  classId: 'paladino', level: 2, backgroundId: 'soldado', hpRolls: [null],
+  classChoices: { 'estilo-de-luta': 'estilo-combatente-abencoado' },
+})
+const grupoAbencoado = spellPickGroups(abencoado).find((g) => g.pick.id === 'estilo-combatente-abencoado-truques')
+ok(!!grupoAbencoado && grupoAbencoado.options.every((s) => s.classes.includes('clerigo')),
+  'Combatente Abencoado oferece truques de Clerigo')
+
+// Ordem Divina (Taumaturgo) da um truque a mais na lista da propria classe.
+const clerigoBase: Character = newCharacter({ classId: 'clerigo', level: 1 })
+const taumaturgo: Character = { ...clerigoBase, classChoices: { 'ordem-divina': 'taumaturgo' } }
+ok(cantripLimit(taumaturgo) === cantripLimit(clerigoBase) + 1,
+  `Taumaturgo conhece 1 truque a mais (${cantripLimit(clerigoBase)} -> ${cantripLimit(taumaturgo)})`)
+
+// Toda escolha de magia declarada nos dados precisa ter opcoes reais.
+for (const f of FEATS) {
+  for (const p of f.spellPicks ?? []) {
+    const disponiveis = SPELLS.filter(
+      (s) => s.level === p.spellLevel && s.classes.some((c) => p.fromClasses.includes(c))
+        && (!p.schools || p.schools.includes(s.school)),
+    )
+    ok(disponiveis.length >= p.count, `${f.name}: ha ${disponiveis.length} opcao(oes) para escolher ${p.count}`)
+  }
+  for (const m of f.innateSpells ?? []) ok(!!spellById(m.spellId), `${f.name}: magia "${m.spellId}" existe`)
+}
+
+console.log('\n== Catalogo de magias do Livro do Jogador ==')
+ok(SPELLS.length >= 380, `catalogo completo: ${SPELLS.length} magias`)
+for (let lvl = 0; lvl <= 9; lvl++) {
+  ok(SPELLS.some((s) => s.level === lvl), `ha magias de ${lvl === 0 ? 'truque' : `${lvl}o circulo`}`)
+}
+for (const c of CLASSES.filter((c) => c.caster !== 'nenhum')) {
+  ok(SPELLS.filter((s) => s.classes.includes(c.id)).length >= 40, `${c.name} tem lista de magias completa`)
+}
+ok(SPELLS.every((s) => s.desc.length > 0 && s.castingTime && s.range && s.components && s.duration),
+  'toda magia tem descricao integral e os quatro campos do livro')
+ok(!!spellById('rajada-mistica') && spellById('rajada-mistica')!.id === 'raio-mistico',
+  'ids antigos continuam resolvendo pela tabela de apelidos')
+
+console.log('\n== Catalogo de itens magicos do Livro do Mestre ==')
+ok(MAGIC_ITEMS.length >= 300, `catalogo completo: ${MAGIC_ITEMS.length} itens magicos`)
+for (const r of RARITY_ORDER) {
+  const n = MAGIC_ITEMS.filter((i) => i.magic?.rarity === r).length
+  ok(n > 0, `ha itens de raridade ${RARITY_NAMES[r]} (${n})`)
+}
+ok(MAGIC_ITEMS.every((i) => i.kind === 'magico'), 'todo item magico tem kind "magico"')
+ok(MAGIC_ITEMS.every((i) => !!i.magic?.rarity && !!i.magic?.category), 'todo item tem raridade e categoria')
+ok(MAGIC_ITEMS.every((i) => (i.magic?.text?.length ?? 0) > 0), 'todo item tem a descricao do livro')
+ok(MAGIC_ITEMS.filter((i) => i.magic?.attunement).length > 100,
+  `itens com sintonizacao: ${MAGIC_ITEMS.filter((i) => i.magic?.attunement).length}`)
+// Itens guardados em fichas antigas continuam resolvendo
+ok(!!itemById('cinto-de-forca-do-gigante-da-colina'), 'ids antigos de itens continuam resolvendo')
+// Os bonus numericos continuam entrando nos calculos da ficha
+const comAnel: Character = {
+  ...g,
+  inventory: [...g.inventory, { uid: 'ring', itemId: 'anel-de-protecao', qty: 1, equipped: true, attuned: true }],
+}
+ok(armorClass(comAnel).total === armorClass(g).total + 1, 'Anel de Protecao do novo catalogo soma +1 na CA')
 
 console.log('\n== Moedas: precos do catalogo e troco ==')
 for (const item of ALL_ITEMS) {

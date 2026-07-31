@@ -6,10 +6,11 @@ import { SPELLS, spellById } from '../data/spells'
 import { GENERAL_FEATS, featById } from '../data/feats'
 import {
   abilityMod, cantripLimit, finalAbilities, levelUpSummary, maxSpellLevel, pendingChoices, preparedLimit,
+  spellPickGroups,
 } from '../engine/rules'
 import { rollHitDie } from '../engine/dice'
 import { useStore } from '../store/store'
-import { Card, Choice, ChoiceAccordion, ChoiceGroup, Segmented, Sheet } from '../components/ui'
+import { Card, Choice, ChoiceAccordion, ChoiceGroup, Segmented, Sheet, SpellText } from '../components/ui'
 
 type AsiMode = 'asi2' | 'asi11' | 'feat'
 
@@ -29,6 +30,8 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
   const [novasMagias, setNovasMagias] = useState<string[]>([])
   const [novasEscolhasEspecie, setNovasEscolhasEspecie] = useState<Record<string, string>>({})
   const [novasEscolhasClasse, setNovasEscolhasClasse] = useState<Record<string, string>>({})
+  /** magias escolhidas nos grupos que não vêm da lista da classe */
+  const [picks, setPicks] = useState<Record<string, string[]>>({})
 
   if (!resumo) return null
   if (novoNivel > 20) {
@@ -62,6 +65,31 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
     source === 'especie' ? novasEscolhasEspecie[groupId] : novasEscolhasClasse[groupId]
   const escolhasOk = escolhasPendentes.every((e) => !!escolhaSelecionada(e.source, e.group.id))
 
+  /*
+   * Magias que não vêm da lista da classe (linhagem élfica, talentos como Tocado
+   * pelo Feérico...) são escolhidas aqui, junto das magias novas da classe.
+   */
+  const draftComEscolhas: Character = {
+    ...draftDepois,
+    speciesChoices: { ...(char.speciesChoices ?? {}), ...novasEscolhasEspecie },
+    classChoices: { ...(char.classChoices ?? {}), ...novasEscolhasClasse },
+    spellPicks: { ...(char.spellPicks ?? {}), ...picks },
+  }
+  const gruposDeMagia = spellPickGroups(draftComEscolhas, {
+    uptoLevel: novoNivel,
+    extraFeatIds: asiMode === 'feat' && featId ? [featId] : [],
+  })
+  const gruposOk = gruposDeMagia.every((g) => !g.pending)
+
+  const togglePick = (grupoId: string, spellId: string, limite: number) => {
+    setPicks((atual) => {
+      const lista = atual[grupoId] ?? char.spellPicks?.[grupoId] ?? []
+      if (lista.includes(spellId)) return { ...atual, [grupoId]: lista.filter((x) => x !== spellId) }
+      if (lista.length >= limite) return atual
+      return { ...atual, [grupoId]: [...lista, spellId] }
+    })
+  }
+
   const precisaSubclasse = resumo.needsSubclass && !subclassId
   const asiOk = !resumo.needsAsi || (
     asiMode === 'feat' ? !!featId
@@ -70,7 +98,7 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
   )
   const truquesOk = novosTruques.length === truquesNovos
   const magiasOk = novasMagias.length === magiasNovas
-  const podeConfirmar = !precisaSubclasse && asiOk && truquesOk && magiasOk && escolhasOk
+  const podeConfirmar = !precisaSubclasse && asiOk && truquesOk && magiasOk && escolhasOk && gruposOk
 
   const toggleAbility = (k: AbilityKey, limite: number) => {
     if (asiAbilities.includes(k)) setAsiAbilities(asiAbilities.filter((x) => x !== k))
@@ -110,6 +138,7 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
       hpRolls,
       speciesChoices: { ...(char.speciesChoices ?? {}), ...novasEscolhasEspecie },
       classChoices: { ...(char.classChoices ?? {}), ...novasEscolhasClasse },
+      spellPicks: { ...(char.spellPicks ?? {}), ...picks },
       spellsKnown: [...char.spellsKnown, ...novosTruques, ...novasMagias],
       spellsPrepared: [...char.spellsPrepared, ...novosTruques, ...novasMagias],
     })
@@ -294,7 +323,7 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
           <ChoiceAccordion>
             {disponiveisTruques.map((s: Spell) => (
               <Choice key={s.id} id={s.id} selected={novosTruques.includes(s.id)} title={s.name}
-                desc={`${s.school} · ${s.castingTime} · ${s.range}`} details={<p>{s.desc}</p>}
+                desc={`${s.school} · ${s.castingTime} · ${s.range}`} details={<SpellText desc={s.desc} />}
                 onClick={() => toggleSpell(novosTruques, setNovosTruques, s.id, truquesNovos)} />
             ))}
           </ChoiceAccordion>
@@ -312,12 +341,32 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
             {disponiveisMagias.map((s) => (
               <Choice key={s.id} id={s.id} selected={novasMagias.includes(s.id)} title={`${s.name} (${s.level}º)`}
                 desc={`${s.school} · ${s.castingTime} · ${s.range}${s.concentration ? ' · Concentração' : ''}`}
-                details={<p>{s.desc}</p>}
+                details={<SpellText desc={s.desc} />}
                 onClick={() => toggleSpell(novasMagias, setNovasMagias, s.id, magiasNovas)} />
             ))}
           </ChoiceAccordion>
         </Card>
       )}
+
+      {/* --- Magias que não vêm da lista da classe (linhagem, talentos, estilo de luta) --- */}
+      {gruposDeMagia.filter((g) => g.pending || picks[g.pick.id]).map(({ pick, options, chosen }) => (
+        <Card key={pick.id} title={`${pick.source} — ${pick.spellLevel === 0 ? 'truques' : `${pick.spellLevel}º círculo`} (${chosen.length}/${pick.count})`}>
+          <p className="muted tiny" style={{ marginBottom: 10 }}>
+            Escolha {pick.count} {pick.spellLevel === 0 ? 'truque(s)' : `magia(s) de ${pick.spellLevel}º círculo`}
+            {' '}da lista de {pick.fromClasses.map((c) => classById(c)?.name ?? c).join(', ')}
+            {pick.schools ? ` (escolas de ${pick.schools.join(' ou ')})` : ''}.
+            {pick.nota ? ` ${pick.nota}` : ''}
+          </p>
+          <ChoiceAccordion>
+            {options.map((s) => (
+              <Choice key={s.id} id={`${pick.id}-${s.id}`} selected={chosen.includes(s.id)} title={s.name}
+                desc={`${s.school} · ${s.castingTime} · ${s.range}${s.concentration ? ' · Concentração' : ''}`}
+                details={<SpellText desc={s.desc} />}
+                onClick={() => togglePick(pick.id, s.id, pick.count)} />
+            ))}
+          </ChoiceAccordion>
+        </Card>
+      ))}
 
       <button className="gold" style={{ width: '100%' }} disabled={!podeConfirmar} onClick={confirmar}>
         ✓ Confirmar Nível {novoNivel}
