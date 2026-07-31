@@ -126,6 +126,16 @@ tenta('SheetTab (golias com escolha pendente)', () => renderToString(<SheetTab c
 tenta('SheetTab (golias com dadiva e estilo)', () => renderToString(<SheetTab char={goliasCompleto} />))
 tenta('SheetTab (draconato paladino nv2)', () => renderToString(<SheetTab char={draconato} />))
 tenta('SheetTab (humano com talento de origem extra)', () => renderToString(<SheetTab char={humano} />))
+
+// Guerreiro drow: nao conjura pela classe, mas a especie concede truque e magias
+const drow: Character = newCharacter({
+  name: 'Zirel', classId: 'guerreiro', speciesId: 'elfo', backgroundId: 'soldado', level: 5,
+  speciesChoices: { 'linhagem-elfica': 'drow', 'sentidos-agucados': 'percepcao' },
+  hpRolls: [null, null, null, null],
+})
+tenta('SpellsTab (guerreiro drow: magias de especie)', () => renderToString(<SpellsTab char={drow} />))
+tenta('SheetTab (guerreiro drow: linhagem na ficha)', () => renderToString(<SheetTab char={drow} />))
+tenta('CharacterSheet (guerreiro drow)', () => renderToString(<CharacterSheet char={drow} onBack={() => {}} />))
 tenta('CharacterSheet (editar escolhas)', () => renderToString(<CharacterSheet char={goliasPendente} onBack={() => {}} />))
 tenta('LevelUpWizard (aasimar nv3: revelacao celestial)', () =>
   renderToString(<LevelUpWizard char={newCharacter({ classId: 'bardo', speciesId: 'aasimar', level: 2, hpRolls: [null] })} onClose={() => {}} />))

@@ -1,5 +1,6 @@
 import type {
-  AbilityKey, AbilityScores, Character, ChoiceOption, Item, InventoryEntry, OptionGroup,
+  AbilityKey, AbilityScores, Character, ChoiceOption, InnateSpell, Item, InventoryEntry,
+  OptionGroup, Spell,
 } from '../types'
 import { ABILITIES } from '../types'
 import { classById, FULL_CASTER_SLOTS, HALF_CASTER_SLOTS, PACT_SLOTS } from '../data/classes'
@@ -7,6 +8,7 @@ import { speciesById } from '../data/species'
 import { backgroundById } from '../data/backgrounds'
 import { WEAPONS, itemById } from '../data/equipment'
 import { SKILLS } from '../data/skills'
+import { spellById } from '../data/spells'
 import { featById } from '../data/feats'
 
 export const abilityMod = (score: number) => Math.floor((score - 10) / 2)
@@ -39,6 +41,22 @@ export function characterChoices(char: Character, uptoLevel = char.level): Resol
 /** Escolhas obrigatórias ainda não feitas — usado para avisar na ficha. */
 export const pendingChoices = (char: Character, uptoLevel = char.level) =>
   characterChoices(char, uptoLevel).filter((c) => !c.chosen)
+
+/** Só as escolhas de espécie já feitas (linhagem élfica, ancestral dracônico...). */
+export const speciesVariants = (char: Character) =>
+  characterChoices(char)
+    .filter((c) => c.source === 'especie' && c.chosen)
+    .map((c) => ({ group: c.group.name, option: c.chosen!.name }))
+
+/**
+ * Rótulo curto da variação da espécie, para o cabeçalho da ficha:
+ * "Elfo (Drow)" em vez de só "Elfo".
+ */
+export function speciesLabel(char: Character): string {
+  const nome = speciesById(char.speciesId)?.name ?? char.speciesId
+  const variante = speciesVariants(char)[0]?.option
+  return variante ? `${nome} (${variante})` : nome
+}
 
 /** Perícias concedidas por opções escolhidas (ex.: Sentidos Aguçados do Elfo). */
 export function grantedSkills(char: Character): string[] {
@@ -330,6 +348,63 @@ export function cantripLimit(char: Character): number {
   const cls = classById(char.classId)
   if (!cls?.cantripsByLevel) return 0
   return cls.cantripsByLevel[Math.min(20, char.level) - 1]
+}
+
+// ---------- Magias concedidas pela espécie ----------
+export interface ResolvedInnateSpell {
+  spell: Spell
+  ability: AbilityKey
+  attackBonus: number
+  saveDC: number
+  freeUses?: InnateSpell['freeUses']
+  /** de onde veio: "Elfo · Linhagem Élfica (Drow)" */
+  source: string
+  nota?: string
+}
+
+/** Texto curto explicando como a magia pode ser conjurada de graça. */
+export function innateUsesLabel(char: Character, freeUses?: InnateSpell['freeUses']): string {
+  if (freeUses === 'vontade') return 'À vontade'
+  if (freeUses === 'prof-longo') return `${proficiencyBonus(char.level)}×/descanso longo`
+  if (freeUses === 'longo') return '1×/descanso longo (ou gastando um espaço de magia)'
+  return ''
+}
+
+/**
+ * Truques e magias que a espécie (e a linhagem escolhida) concedem no nível atual.
+ * Valem para qualquer classe — inclusive para quem não conjura, como o Guerreiro.
+ */
+export function innateSpells(char: Character): ResolvedInnateSpell[] {
+  const sp = speciesById(char.speciesId)
+  if (!sp) return []
+  const pb = proficiencyBonus(char.level)
+  const mods = abilityMods(char)
+
+  const fontes: { lista: InnateSpell[]; source: string }[] = []
+  if (sp.innateSpells?.length) fontes.push({ lista: sp.innateSpells, source: sp.name })
+  for (const { source, group, chosen } of characterChoices(char)) {
+    if (source !== 'especie' || !chosen?.innateSpells?.length) continue
+    fontes.push({ lista: chosen.innateSpells, source: `${group.name}: ${chosen.name}` })
+  }
+
+  const out: ResolvedInnateSpell[] = []
+  const vistos = new Set<string>()
+  for (const { lista, source } of fontes) {
+    for (const it of lista) {
+      if (char.level < it.level) continue
+      const spell = spellById(it.spellId)
+      if (!spell || vistos.has(spell.id)) continue
+      vistos.add(spell.id)
+      // Quando a regra deixa escolher a habilidade, usamos a melhor do personagem.
+      const ability = [...it.abilities].sort((a, b) => mods[b] - mods[a])[0]
+      const mod = mods[ability]
+      out.push({
+        spell, ability, attackBonus: mod + pb, saveDC: 8 + mod + pb,
+        freeUses: it.freeUses, source, nota: it.nota,
+      })
+    }
+  }
+  return out.sort((a, b) => a.spell.level - b.spell.level || a.spell.name.localeCompare(b.spell.name))
 }
 
 /** Nível máximo de magia acessível (para filtrar o catálogo). */

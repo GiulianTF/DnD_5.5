@@ -4,8 +4,10 @@ import { ABILITY_NAMES } from '../../types'
 import { SPELLS, spellById } from '../../data/spells'
 import { classById } from '../../data/classes'
 import {
-  cantripLimit, maxSpellLevel, pactSlots, preparedLimit, spellSlots, spellcasting,
+  cantripLimit, fmtMod, innateSpells, innateUsesLabel, maxSpellLevel, pactSlots, preparedLimit,
+  spellSlots, spellcasting,
 } from '../../engine/rules'
+import { speciesById } from '../../data/species'
 import { useStore } from '../../store/store'
 import { Card, Empty, Sheet } from '../../components/ui'
 
@@ -24,13 +26,60 @@ export function SpellsTab({ char }: { char: Character }) {
   const cantripMax = cantripLimit(char)
   const maxLvl = maxSpellLevel(char)
 
+  // Truques e magias concedidos pela espécie/linhagem valem para qualquer classe.
+  const inatas = innateSpells(char)
+  const especie = speciesById(char.speciesId)
+
+  const cardEspecie = inatas.length > 0 && (
+    <Card title={`Magias de ${especie?.name ?? 'Espécie'}`}>
+      <p className="muted tiny" style={{ marginBottom: 10 }}>
+        Concedidas pelos traços da sua espécie — você as tem além das magias da classe e elas
+        não ocupam espaço no seu repertório.
+      </p>
+      {inatas.map((m) => (
+        <div className="list-item eq" key={m.spell.id}>
+          <div className="spread">
+            <div style={{ flex: 1 }} onClick={() => setDetail(m.spell.id)}>
+              <strong style={{ fontSize: '.92rem' }}>
+                {m.spell.name} <span className="muted tiny">({m.spell.level === 0 ? 'truque' : `${m.spell.level}º`})</span>
+              </strong>
+              <div className="tiny muted">
+                {m.spell.school} · {m.spell.castingTime} · {m.spell.range}
+                {m.spell.concentration ? ' · Concentração' : ''}
+              </div>
+              <div className="tiny gold">
+                {m.source} · {innateUsesLabel(char, m.freeUses)}
+              </div>
+              <div className="tiny muted">
+                {ABILITY_NAMES[m.ability]} · CD {m.saveDC} · ataque {fmtMod(m.attackBonus)}
+              </div>
+              {m.nota && <div className="tiny muted">{m.nota}</div>}
+            </div>
+          </div>
+        </div>
+      ))}
+    </Card>
+  )
+
+  // Quem não conjura pela classe ainda pode ter magias de espécie — mostramos só elas.
   if (!sc || !cls) {
+    if (inatas.length === 0) {
+      return (
+        <Empty
+          icon="✨"
+          title={`${cls?.name ?? 'Esta classe'} não conjura magias`}
+          hint="Subclasses como Cavaleiro Arcano e Trapaceiro Arcano ganham conjuração no 3º nível."
+        />
+      )
+    }
     return (
-      <Empty
-        icon="✨"
-        title={`${cls?.name ?? 'Esta classe'} não conjura magias`}
-        hint="Subclasses como Cavaleiro Arcano e Trapaceiro Arcano ganham conjuração no 3º nível."
-      />
+      <div>
+        <div className="banner">
+          {cls?.name ?? 'Sua classe'} não conjura magias, mas a sua espécie concede as magias abaixo.
+        </div>
+        {cardEspecie}
+        {detail && <DetalheMagia id={detail} onClose={() => setDetail(null)} />}
+      </div>
     )
   }
 
@@ -141,6 +190,8 @@ export function SpellsTab({ char }: { char: Character }) {
         )
       )}
 
+      {cardEspecie}
+
       <button className="primary" style={{ width: '100%', marginBottom: 12 }} onClick={() => setBrowser(true)}>
         ＋ Adicionar magia ao repertório
       </button>
@@ -226,29 +277,39 @@ export function SpellsTab({ char }: { char: Character }) {
         </Sheet>
       )}
 
-      {detail && (() => {
-        const s = spellById(detail)!
-        return (
-          <Sheet title={s.name} onClose={() => setDetail(null)}>
-            <div className="muted tiny" style={{ marginBottom: 12, lineHeight: 1.7 }}>
-              <strong className="gold">{s.level === 0 ? 'Truque' : `Magia de ${s.level}º nível`}</strong> · {s.school}
-              <br /><strong>Tempo de Conjuração:</strong> {s.castingTime}
-              <br /><strong>Alcance:</strong> {s.range}
-              <br /><strong>Componentes:</strong> {s.components}
-              <br /><strong>Duração:</strong> {s.duration}
-              {s.concentration && <><br /><strong className="gold">Requer Concentração</strong></>}
-              {s.ritual && <><br /><strong className="gold">Pode ser conjurada como Ritual</strong></>}
-            </div>
-            <p style={{ lineHeight: 1.6, fontSize: '.9rem' }}>{s.desc}</p>
-            <div className="tiny muted" style={{ marginTop: 10 }}>Classes: {s.classes.map((c) => classById(c)?.name ?? c).join(', ')}</div>
-            {!char.spellsKnown.includes(s.id) && (
-              <button className="primary" style={{ width: '100%', marginTop: 12 }} onClick={() => { addSpell(s.id); setDetail(null) }}>
-                Adicionar ao repertório
-              </button>
-            )}
-          </Sheet>
-        )
-      })()}
+      {detail && (
+        <DetalheMagia
+          id={detail}
+          onClose={() => setDetail(null)}
+          onAdd={char.spellsKnown.includes(detail) ? undefined : () => { addSpell(detail); setDetail(null) }}
+        />
+      )}
     </div>
+  )
+}
+
+/** Folha com a descrição completa de uma magia, usada nas duas variações da aba. */
+function DetalheMagia({ id, onClose, onAdd }: { id: string; onClose: () => void; onAdd?: () => void }) {
+  const s = spellById(id)
+  if (!s) return null
+  return (
+    <Sheet title={s.name} onClose={onClose}>
+      <div className="muted tiny" style={{ marginBottom: 12, lineHeight: 1.7 }}>
+        <strong className="gold">{s.level === 0 ? 'Truque' : `Magia de ${s.level}º nível`}</strong> · {s.school}
+        <br /><strong>Tempo de Conjuração:</strong> {s.castingTime}
+        <br /><strong>Alcance:</strong> {s.range}
+        <br /><strong>Componentes:</strong> {s.components}
+        <br /><strong>Duração:</strong> {s.duration}
+        {s.concentration && <><br /><strong className="gold">Requer Concentração</strong></>}
+        {s.ritual && <><br /><strong className="gold">Pode ser conjurada como Ritual</strong></>}
+      </div>
+      <p style={{ lineHeight: 1.6, fontSize: '.9rem' }}>{s.desc}</p>
+      <div className="tiny muted" style={{ marginTop: 10 }}>Classes: {s.classes.map((c) => classById(c)?.name ?? c).join(', ')}</div>
+      {onAdd && (
+        <button className="primary" style={{ width: '100%', marginTop: 12 }} onClick={onAdd}>
+          Adicionar ao repertório
+        </button>
+      )}
+    </Sheet>
   )
 }

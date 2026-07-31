@@ -9,7 +9,7 @@ import {
 } from '../engine/rules'
 import { rollHitDie } from '../engine/dice'
 import { useStore } from '../store/store'
-import { Card, Choice, ChoiceGroup, Segmented, Sheet } from '../components/ui'
+import { Card, Choice, ChoiceAccordion, ChoiceGroup, Segmented, Sheet } from '../components/ui'
 
 type AsiMode = 'asi2' | 'asi11' | 'feat'
 
@@ -171,22 +171,25 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
           <p className="muted tiny" style={{ marginBottom: 10 }}>
             Esta escolha é permanente e concede características agora e em níveis futuros.
           </p>
-          {cls.subclasses.map((s) => (
-            <Choice
-              key={s.id}
-              selected={subclassId === s.id}
-              title={s.name}
-              desc={s.desc}
-              defaultOpen={subclassId === s.id}
-              details={s.features.map((f) => (
-                <div className="feature" key={f.name}>
-                  <h4>{f.name} <span className="muted tiny">· Nível {f.level}</span></h4>
-                  <p>{f.desc}</p>
-                </div>
-              ))}
-              onClick={() => setSubclassId(s.id)}
-            />
-          ))}
+          <ChoiceAccordion>
+            {cls.subclasses.map((s) => (
+              <Choice
+                key={s.id}
+                id={s.id}
+                selected={subclassId === s.id}
+                title={s.name}
+                desc={s.desc}
+                defaultOpen={subclassId === s.id}
+                details={s.features.map((f) => (
+                  <div className="feature" key={f.name}>
+                    <h4>{f.name} <span className="muted tiny">· Nível {f.level}</span></h4>
+                    <p>{f.desc}</p>
+                  </div>
+                ))}
+                onClick={() => setSubclassId(s.id)}
+              />
+            ))}
+          </ChoiceAccordion>
         </Card>
       )}
 
@@ -243,11 +246,13 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
 
           {asiMode === 'feat' && (
             <div style={{ marginTop: 12 }}>
-              {GENERAL_FEATS.filter((f) => f.id !== 'aumento-de-habilidade').map((f) => (
-                <Choice key={f.id} selected={featId === f.id} title={f.name}
-                  details={<p>{f.desc}</p>} defaultOpen={featId === f.id}
-                  onClick={() => { setFeatId(f.id); setAsiAbilities([]) }} />
-              ))}
+              <ChoiceAccordion>
+                {GENERAL_FEATS.filter((f) => f.id !== 'aumento-de-habilidade').map((f) => (
+                  <Choice key={f.id} id={f.id} selected={featId === f.id} title={f.name}
+                    details={<p>{f.desc}</p>} defaultOpen={featId === f.id}
+                    onClick={() => { setFeatId(f.id); setAsiAbilities([]) }} />
+                ))}
+              </ChoiceAccordion>
               {featSelecionado?.abilityIncrease?.length && (
                 <div style={{ marginTop: 10 }}>
                   <label>Este talento também concede +1 em uma habilidade:</label>
@@ -286,11 +291,13 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
       {/* --- Novos truques --- */}
       {truquesNovos > 0 && (
         <Card title={`Novos Truques (${novosTruques.length}/${truquesNovos})`}>
-          {disponiveisTruques.map((s: Spell) => (
-            <Choice key={s.id} selected={novosTruques.includes(s.id)} title={s.name}
-              desc={`${s.school} · ${s.castingTime} · ${s.range}`} details={<p>{s.desc}</p>}
-              onClick={() => toggleSpell(novosTruques, setNovosTruques, s.id, truquesNovos)} />
-          ))}
+          <ChoiceAccordion>
+            {disponiveisTruques.map((s: Spell) => (
+              <Choice key={s.id} id={s.id} selected={novosTruques.includes(s.id)} title={s.name}
+                desc={`${s.school} · ${s.castingTime} · ${s.range}`} details={<p>{s.desc}</p>}
+                onClick={() => toggleSpell(novosTruques, setNovosTruques, s.id, truquesNovos)} />
+            ))}
+          </ChoiceAccordion>
         </Card>
       )}
 
@@ -301,12 +308,14 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
             Você agora {char.classId === 'mago' ? 'adiciona ao grimório' : 'prepara'} até {limiteDepois} magias,
             de até {maxLvl}º nível.
           </p>
-          {disponiveisMagias.map((s) => (
-            <Choice key={s.id} selected={novasMagias.includes(s.id)} title={`${s.name} (${s.level}º)`}
-              desc={`${s.school} · ${s.castingTime} · ${s.range}${s.concentration ? ' · Concentração' : ''}`}
-              details={<p>{s.desc}</p>}
-              onClick={() => toggleSpell(novasMagias, setNovasMagias, s.id, magiasNovas)} />
-          ))}
+          <ChoiceAccordion>
+            {disponiveisMagias.map((s) => (
+              <Choice key={s.id} id={s.id} selected={novasMagias.includes(s.id)} title={`${s.name} (${s.level}º)`}
+                desc={`${s.school} · ${s.castingTime} · ${s.range}${s.concentration ? ' · Concentração' : ''}`}
+                details={<p>{s.desc}</p>}
+                onClick={() => toggleSpell(novasMagias, setNovasMagias, s.id, magiasNovas)} />
+            ))}
+          </ChoiceAccordion>
         </Card>
       )}
 

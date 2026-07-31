@@ -3,11 +3,13 @@ import type { Character } from './types'
 import { newCharacter, normalizeCharacter } from './store/store'
 import {
   armorClass, attackActions, characterFeats, maxHp, spellSlots, pactSlots, preparedLimit, cantripLimit,
-  characterResources, levelUpSummary, finalAbilities, pendingChoices, saves, skillValues, spellcasting,
+  characterResources, innateSpells, levelUpSummary, finalAbilities, pendingChoices, saves, skillValues,
+  speciesLabel, spellcasting,
 } from './engine/rules'
+import { pagar, parseCost, purseInCopper } from './engine/money'
 import { CLASSES } from './data/classes'
 import { SPECIES } from './data/species'
-import { SPELLS } from './data/spells'
+import { SPELLS, spellById } from './data/spells'
 import { BACKGROUNDS } from './data/backgrounds'
 import { ALL_ITEMS, itemById } from './data/equipment'
 import { featById } from './data/feats'
@@ -208,6 +210,45 @@ for (const bg of BACKGROUNDS) {
     for (const it of opt.items) ok(!!itemById(it.itemId), `${bg.name} opcao ${opt.id}: item "${it.itemId}" existe`)
   }
 }
+
+console.log('\n== Magias concedidas pela especie ==')
+const drowGuerreiro: Character = newCharacter({
+  classId: 'guerreiro', speciesId: 'elfo', backgroundId: 'soldado', level: 5,
+  speciesChoices: { 'linhagem-elfica': 'drow', 'sentidos-agucados': 'percepcao' },
+  hpRolls: [null, null, null, null],
+})
+const inatasDrow = innateSpells(drowGuerreiro)
+ok(inatasDrow.some((m) => m.spell.id === 'globos-de-luz'), 'guerreiro drow recebe o truque Globos de Luz')
+ok(inatasDrow.some((m) => m.spell.id === 'fogo-das-fadas'), 'drow nivel 5 ja tem Fogo das Fadas (nivel 3)')
+ok(inatasDrow.some((m) => m.spell.id === 'escuridao'), 'drow nivel 5 ja tem Escuridao')
+ok(innateSpells({ ...drowGuerreiro, level: 1 }).length === 1, 'no nivel 1 o drow so tem o truque')
+ok(inatasDrow.every((m) => m.saveDC >= 8 && m.attackBonus >= 0), 'magias de especie tem CD e ataque calculados')
+ok(speciesLabel(drowGuerreiro) === 'Elfo (Drow)', `rotulo da especie mostra a linhagem: ${speciesLabel(drowGuerreiro)}`)
+
+// Todas as espécies/linhagens que declaram magias apontam para magias existentes
+for (const s of SPECIES) {
+  for (const m of s.innateSpells ?? []) ok(!!spellById(m.spellId), `${s.name}: magia "${m.spellId}" existe`)
+  for (const g of s.choices ?? []) {
+    for (const o of g.options) {
+      for (const m of o.innateSpells ?? []) ok(!!spellById(m.spellId), `${s.name}/${o.name}: magia "${m.spellId}" existe`)
+    }
+  }
+}
+
+console.log('\n== Moedas: precos do catalogo e troco ==')
+for (const item of ALL_ITEMS) {
+  if (item.cost) ok(parseCost(item.cost) !== null, `preco de "${item.name}" (${item.cost}) foi entendido`)
+}
+ok(parseCost('25 PO') === 2500, 'parseCost 25 PO = 2500 PC')
+ok(parseCost('5 PP') === 50, 'parseCost 5 PP = 50 PC')
+const bolsa1 = { pc: 0, pp: 0, pe: 0, po: 10, pl: 0 }
+const depois1 = pagar(bolsa1, 250)!
+ok(!!depois1 && purseInCopper(depois1) === 750, `pagar 2,5 PO de 10 PO deixa 7,5 PO (${purseInCopper(depois1)} PC)`)
+const bolsa2 = { pc: 0, pp: 0, pe: 0, po: 1, pl: 0 }
+const depois2 = pagar(bolsa2, 5)!
+ok(!!depois2 && depois2.pp === 9 && depois2.pc === 5, `quebrar 1 PO para pagar 5 PC devolve troco (${depois2.pp} PP, ${depois2.pc} PC)`)
+ok(pagar({ pc: 3, pp: 0, pe: 0, po: 0, pl: 0 }, 100) === null, 'sem dinheiro suficiente, pagar retorna null')
+ok(purseInCopper({ pc: 1, pp: 1, pe: 1, po: 1, pl: 1 }) === 1161, 'valor total da bolsa em cobre')
 
 console.log('\n== Fichas antigas (sem os campos novos) ==')
 const antiga = JSON.parse(JSON.stringify(newCharacter({ classId: 'guerreiro' }))) as Character

@@ -8,9 +8,9 @@ import { ActionsTab } from './tabs/ActionsTab'
 import { ItemsTab } from './tabs/ItemsTab'
 import { SpellsTab } from './tabs/SpellsTab'
 import { LevelUpWizard } from './LevelUpWizard'
-import { Card, Choice, ChoiceGroup, Sheet } from '../components/ui'
+import { Card, Choice, ChoiceAccordion, ChoiceGroup, Sheet } from '../components/ui'
 import { useStore } from '../store/store'
-import { characterChoices } from '../engine/rules'
+import { characterChoices, speciesLabel } from '../engine/rules'
 import { ORIGIN_FEATS, featById } from '../data/feats'
 import { backgroundById } from '../data/backgrounds'
 
@@ -51,7 +51,7 @@ export function CharacterSheet({ char, onBack }: { char: Character; onBack: () =
         <div style={{ flex: 1, minWidth: 0 }} onClick={() => setEditando(true)}>
           <h1>{char.name}</h1>
           <div className="sub">
-            {speciesById(char.speciesId)?.name} · {cls?.name} {char.level}
+            {speciesLabel(char)} · {cls?.name} {char.level}
             {sub && ` · ${sub.name}`}
           </div>
         </div>
@@ -118,11 +118,13 @@ export function CharacterSheet({ char, onBack }: { char: Character; onBack: () =
                 {species.name} concede um talento de Origem além do que vem do antecedente
                 {bg ? ` (${featById(bg.featId)?.name})` : ''}.
               </p>
+              <ChoiceAccordion>
               {ORIGIN_FEATS.map((f) => {
                 const escolhido = (char.originFeats ?? [])[0] === f.id
                 return (
                   <Choice
                     key={f.id}
+                    id={f.id}
                     selected={escolhido}
                     title={f.name}
                     details={<p>{f.desc}</p>}
@@ -131,6 +133,7 @@ export function CharacterSheet({ char, onBack }: { char: Character; onBack: () =
                   />
                 )
               })}
+              </ChoiceAccordion>
               {(char.originFeats ?? []).length === 0 && (
                 <div className="banner warn">Você ainda não escolheu este talento.</div>
               )}

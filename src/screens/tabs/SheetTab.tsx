@@ -4,8 +4,9 @@ import { ABILITIES, ABILITY_NAMES } from '../../types'
 import {
   abilityMods, armorClass, characterChoices, characterFeats, characterResources, currentHp,
   finalAbilities, fmtMod, initiative, maxHp, passivePerception, proficiencyBonus, saves,
-  speed, spellcasting, unlockedFeatures,
+  speciesLabel, speciesVariants, speed, spellcasting, unlockedFeatures,
 } from '../../engine/rules'
+import { featById } from '../../data/feats'
 import { FEAT_CATEGORY_NAMES } from '../../data/feats'
 import { useStore } from '../../store/store'
 import { roll } from '../../engine/dice'
@@ -32,6 +33,13 @@ export function SheetTab({ char }: { char: Character }) {
   const feats = characterFeats(char)
   const escolhas = characterChoices(char)
   const pendentes = escolhas.filter((e) => !e.chosen)
+  const variantes = speciesVariants(char)
+  const pendentesEspecie = pendentes.filter((e) => e.source === 'especie')
+  const bg = backgroundById(char.backgroundId)
+  const bonusDoAntecedente = ABILITIES
+    .filter((k) => (char.backgroundBonuses[k] ?? 0) > 0)
+    .map((k) => `${ABILITY_NAMES[k]} +${char.backgroundBonuses[k]}`)
+    .join(', ')
 
   // O resultado aparece no aviso flutuante (RollToast), visível em qualquer ponto da página.
   const doRoll = (label: string, modifier: number) => {
@@ -236,14 +244,34 @@ export function SheetTab({ char }: { char: Character }) {
 
       <Card title="Espécie e Antecedente">
         <div className="feature">
-          <h4>{speciesById(char.speciesId)?.name}</h4>
+          <h4>{speciesLabel(char)}</h4>
+          {/* Variações escolhidas (linhagem élfica, ancestral dracônico, legado infernal...) */}
+          {variantes.map((v) => (
+            <p key={v.group}><strong className="gold">{v.group}:</strong> {v.option}</p>
+          ))}
+          {pendentesEspecie.map((p) => (
+            <p key={p.group.id} style={{ color: 'var(--red)' }}>
+              <strong>{p.group.name}:</strong> ainda não escolhido
+            </p>
+          ))}
           {speciesById(char.speciesId)?.traits.map((t) => (
             <p key={t.name}><strong>{t.name}:</strong> {t.desc}</p>
           ))}
         </div>
         <div className="feature">
-          <h4>{backgroundById(char.backgroundId)?.name}</h4>
-          <p>{backgroundById(char.backgroundId)?.desc}</p>
+          <h4>{bg?.name ?? 'Sem antecedente'}</h4>
+          <p>{bg?.desc}</p>
+          {bg && (
+            <>
+              <p>
+                <strong className="gold">Bônus de habilidade:</strong>{' '}
+                {bonusDoAntecedente || 'nenhum distribuído'}
+                {char.freeBackgroundBonuses ? ' (distribuição livre)' : ''}
+              </p>
+              <p><strong className="gold">Talento de Origem:</strong> {featById(bg.featId)?.name}</p>
+              <p><strong className="gold">Ferramenta:</strong> {bg.tool}</p>
+            </>
+          )}
         </div>
       </Card>
 

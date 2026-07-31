@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AbilityScores, Character, RollEntry } from '../types'
 import { emptyScores } from '../engine/pointbuy'
+import { emptyPurse, purseFromGold } from '../engine/money'
 import { classById } from '../data/classes'
 import { rollHitDie } from '../engine/dice'
 import { uid } from '../engine/uid'
@@ -29,6 +30,7 @@ export const newCharacter = (partial: Partial<Character> = {}): Character => ({
   hitDiceSpent: 0,
   inventory: [],
   gold: 0,
+  coins: emptyPurse(),
   spellsKnown: [],
   spellsPrepared: [],
   slotsSpent: {},
@@ -59,6 +61,8 @@ export const normalizeCharacter = (c: Character): Character => ({
   slotsSpent: c.slotsSpent ?? {},
   resourcesUsed: c.resourcesUsed ?? {},
   backgroundBonuses: c.backgroundBonuses ?? {},
+  // Fichas antigas guardavam só o ouro; viram uma bolsa completa de moedas.
+  coins: c.coins ?? purseFromGold(c.gold ?? 0),
 })
 
 interface AppState {

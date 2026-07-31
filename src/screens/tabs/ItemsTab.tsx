@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import type { Character, Item } from '../../types'
+import type { Character, CoinKey, Item } from '../../types'
+import { COINS, COIN_NAMES } from '../../types'
 import { ARMORS, GEAR, MAGIC_ITEMS, SHIELD, WEAPONS, itemById } from '../../data/equipment'
 import {
   armorClass, attunedCount, isProficientWithArmor, isProficientWithWeapon, resolveInventory,
 } from '../../engine/rules'
+import { formatCopper, pagar, parseCost, purseInCopper } from '../../engine/money'
 import { useStore } from '../../store/store'
 import { uid } from '../../engine/uid'
 import { Card, Empty, Sheet } from '../../components/ui'
@@ -19,16 +21,34 @@ export function ItemsTab({ char }: { char: Character }) {
   const update = useStore((s) => s.updateCharacter)
   const [catalog, setCatalog] = useState(false)
   const [detail, setDetail] = useState<string | null>(null)
+  const [aviso, setAviso] = useState<string | null>(null)
 
   const inv = resolveInventory(char)
   const ac = armorClass(char)
   const attuned = attunedCount(char)
+  const bolsa = char.coins
 
+  /**
+   * Adiciona o item e desconta o preço da bolsa. Se faltar dinheiro, o item entra
+   * do mesmo jeito (pode ter sido um saque ou presente do mestre) e o aviso explica.
+   */
   const addItem = (itemId: string) => {
+    const item = itemById(itemId)
+    const custo = parseCost(item?.cost)
+    const nova = custo ? pagar(char.coins, custo) : null
+
     update(char.id, (c) => ({
       inventory: [...c.inventory, { uid: uid(), itemId, qty: 1, equipped: false }],
+      ...(nova ? { coins: nova } : {}),
     }))
+
+    if (!custo) setAviso(`${item?.name ?? 'Item'} adicionado (sem preço de tabela — nada foi descontado).`)
+    else if (nova) setAviso(`${item?.name} comprado por ${formatCopper(custo)}.`)
+    else setAviso(`${item?.name} adicionado, mas você não tinha ${formatCopper(custo)} — nada foi descontado.`)
   }
+
+  const setCoin = (k: CoinKey, v: number) =>
+    update(char.id, (c) => ({ coins: { ...c.coins, [k]: Math.max(0, Math.floor(v) || 0) } }))
 
   const removeItem = (uid: string) =>
     update(char.id, (c) => ({ inventory: c.inventory.filter((e) => e.uid !== uid) }))
@@ -68,7 +88,6 @@ export function ItemsTab({ char }: { char: Character }) {
     const { entry, item, name } = r
     const podeEquipar = item.kind === 'arma' || item.kind === 'armadura' || item.kind === 'escudo'
     const podeSintonizar = !!item.magic?.attunement
-    const podeBonus = item.kind === 'arma' || item.kind === 'armadura' || item.kind === 'escudo'
     const proficiente = item.kind === 'arma'
       ? isProficientWithWeapon(char, item)
       : (item.kind === 'armadura' || item.kind === 'escudo') ? isProficientWithArmor(char, item) : true
@@ -99,18 +118,6 @@ export function ItemsTab({ char }: { char: Character }) {
               onClick={() => toggleAttune(entry.uid)}>
               {entry.attuned ? '✓ Sintonizado' : 'Sintonizar'}
             </button>
-          )}
-          {podeBonus && (
-            <div className="row" style={{ gap: 4 }}>
-              <span className="tiny muted">Bônus mágico:</span>
-              {[0, 1, 2, 3].map((b) => (
-                <button key={b} className={`sm${(entry.bonus ?? 0) === b ? ' gold' : ' ghost'}`}
-                  style={{ minWidth: 34, padding: '4px 6px' }}
-                  onClick={() => patchEntry(entry.uid, { bonus: b })}>
-                  {b === 0 ? '—' : `+${b}`}
-                </button>
-              ))}
-            </div>
           )}
         </div>
       </div>
@@ -144,16 +151,29 @@ export function ItemsTab({ char }: { char: Character }) {
         <Card title="Na mochila">{guardados.map(renderEntry)}</Card>
       )}
 
-      <Card title="Moedas de Ouro">
-        <div className="row" style={{ gap: 6 }}>
-          <input type="number" inputMode="numeric" value={char.gold}
-            onChange={(e) => update(char.id, { gold: Math.max(0, Number(e.target.value) || 0) })} />
-          <span className="gold">PO</span>
+      <Card title="Bolsa de Moedas">
+        <div className="coin-grid">
+          {COINS.map((k) => (
+            <div key={k}>
+              <label>{k.toUpperCase()} <span className="muted tiny">{COIN_NAMES[k]}</span></label>
+              <input type="number" inputMode="numeric" min={0} value={bolsa[k]}
+                onChange={(e) => setCoin(k, Number(e.target.value))} />
+            </div>
+          ))}
+        </div>
+        <div className="muted tiny" style={{ marginTop: 8 }}>
+          Total: <strong className="gold">{formatCopper(purseInCopper(bolsa))}</strong>.
+          Ao adicionar um item do catálogo, o preço de tabela é descontado automaticamente
+          (com troco quando precisa quebrar uma moeda maior).
         </div>
       </Card>
 
       {catalog && (
-        <Sheet title="Catálogo de Itens" onClose={() => setCatalog(false)}>
+        <Sheet title="Catálogo de Itens" onClose={() => { setCatalog(false); setAviso(null) }}>
+          <div className="banner">
+            Na bolsa: <strong className="gold">{formatCopper(purseInCopper(bolsa))}</strong>
+            {aviso && <div className="tiny" style={{ marginTop: 4 }}>{aviso}</div>}
+          </div>
           {CATEGORIAS.map((cat) => (
             <details key={cat.id} open={cat.id === 'arma'}>
               <summary>{cat.label} ({cat.items.length})</summary>
@@ -172,9 +192,6 @@ export function ItemsTab({ char }: { char: Character }) {
               </div>
             </details>
           ))}
-          <div className="muted tiny center" style={{ marginTop: 12 }}>
-            Para criar uma arma mágica, adicione a arma comum e depois escolha o bônus (+1/+2/+3) na mochila.
-          </div>
         </Sheet>
       )}
 

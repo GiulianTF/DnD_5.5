@@ -1,5 +1,16 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { OptionGroup } from '../types'
+
+/**
+ * Escopo de acordeão: dentro dele apenas uma escolha fica expandida por vez —
+ * abrir uma fecha automaticamente a anterior.
+ */
+const AccordionCtx = createContext<{ aberta: string | null; abrir: (id: string | null) => void } | null>(null)
+
+export function ChoiceAccordion({ children }: { children: ReactNode }) {
+  const [aberta, abrir] = useState<string | null>(null)
+  return <AccordionCtx.Provider value={{ aberta, abrir }}>{children}</AccordionCtx.Provider>
+}
 
 export function Sheet({ title, onClose, children, footer }: {
   title: string
@@ -65,7 +76,7 @@ export function Segmented<T extends string>({ value, options, onChange }: {
  * Item de escolha. Quando recebe `details`, vira um item expansível: selecionar
  * abre o detalhe e a setinha permite abrir/fechar sem mudar a seleção.
  */
-export function Choice({ selected, title, desc, onClick, details, disabled, defaultOpen = false }: {
+export function Choice({ selected, title, desc, onClick, details, disabled, defaultOpen = false, id }: {
   selected: boolean
   title: string
   desc?: ReactNode
@@ -73,8 +84,22 @@ export function Choice({ selected, title, desc, onClick, details, disabled, defa
   details?: ReactNode
   disabled?: boolean
   defaultOpen?: boolean
+  /** identidade dentro do acordeão; por padrão usa o título */
+  id?: string
 }) {
-  const [open, setOpen] = useState(defaultOpen)
+  const acordeao = useContext(AccordionCtx)
+  const chave = id ?? title
+  const [localOpen, setLocalOpen] = useState(defaultOpen)
+
+  // Dentro de um acordeão quem manda é o pai; fora dele cada item cuida de si.
+  const open = acordeao ? acordeao.aberta === chave : localOpen
+  const setOpen = (v: boolean) => (acordeao ? acordeao.abrir(v ? chave : null) : setLocalOpen(v))
+
+  // Ao montar, deixa a opção já selecionada aberta.
+  useEffect(() => {
+    if (defaultOpen && acordeao) acordeao.abrir(chave)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   if (!details) {
     return (
@@ -100,7 +125,7 @@ export function Choice({ selected, title, desc, onClick, details, disabled, defa
           className="choice-toggle"
           aria-expanded={open}
           aria-label={open ? 'Recolher detalhes' : 'Ver detalhes'}
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => setOpen(!open)}
         >{open ? '▲' : '▼'}</button>
       </div>
       {open && <div className="choice-details">{details}</div>}
@@ -118,16 +143,19 @@ export function ChoiceGroup({ group, value, onChange, aviso = true }: {
   return (
     <Card title={group.name}>
       {group.desc && <p className="muted tiny" style={{ marginBottom: 10 }}>{group.desc}</p>}
-      {group.options.map((o) => (
-        <Choice
-          key={o.id}
-          selected={value === o.id}
-          title={o.name}
-          details={<p>{o.desc}</p>}
-          defaultOpen={value === o.id}
-          onClick={() => onChange(o.id)}
-        />
-      ))}
+      <ChoiceAccordion>
+        {group.options.map((o) => (
+          <Choice
+            key={o.id}
+            id={o.id}
+            selected={value === o.id}
+            title={o.name}
+            details={<p>{o.desc}</p>}
+            defaultOpen={value === o.id}
+            onClick={() => onChange(o.id)}
+          />
+        ))}
+      </ChoiceAccordion>
       {aviso && !value && <div className="banner warn">Escolha uma opção para continuar.</div>}
     </Card>
   )
