@@ -1,4 +1,18 @@
-import type { OptionGroup, Species } from '../types'
+import type { AbilityKey, InnateSpell, OptionGroup, Species } from '../types'
+
+/**
+ * No PHB 2024 as magias de linhagem usam a habilidade que o jogador escolher
+ * entre Inteligência, Sabedoria e Carisma — a ficha aplica a de maior valor.
+ */
+const INT_SAB_CAR: AbilityKey[] = ['int', 'sab', 'car']
+
+/** Atalho para declarar magias concedidas por espécie/linhagem. */
+const magia = (
+  spellId: string, level: number,
+  freeUses: InnateSpell['freeUses'] = 'longo',
+  abilities: AbilityKey[] = INT_SAB_CAR,
+  nota?: string,
+): InnateSpell => ({ spellId, level, abilities, freeUses, nota })
 
 /** Ancestrais dracônicos: cada cor define o dano do Sopro e a resistência. */
 const ANCESTRAL_DRACONICO: OptionGroup = {
@@ -39,9 +53,36 @@ const LINHAGEM_ELFICA: OptionGroup = {
   name: 'Linhagem Élfica',
   desc: 'Escolha sua linhagem. Ela concede truques e magias conforme você sobe de nível.',
   options: [
-    { id: 'drow', name: 'Drow', desc: 'Visão no escuro 36 m. Truque Globos de Luz. Nível 3: Fogo das Fadas. Nível 5: Escuridão (1×/descanso longo cada, ou gastando espaços).' },
-    { id: 'alto-elfo', name: 'Alto Elfo', desc: 'Um truque de Mago (trocável em cada descanso longo). Nível 3: Detectar Magia. Nível 5: Passo Nebuloso.' },
-    { id: 'elfo-floresta', name: 'Elfo da Floresta', desc: 'Deslocamento 10,5 m. Truque Druidismo. Nível 3: Passo Longo. Nível 5: Passar sem Rastro.' },
+    {
+      id: 'drow',
+      name: 'Drow',
+      desc: 'Visão no escuro 36 m. Truque Globos de Luz. Nível 3: Fogo das Fadas. Nível 5: Escuridão (1×/descanso longo cada, ou gastando espaços).',
+      innateSpells: [
+        magia('globos-de-luz', 1, 'vontade'),
+        magia('fogo-das-fadas', 3),
+        magia('escuridao', 5),
+      ],
+    },
+    {
+      id: 'alto-elfo',
+      name: 'Alto Elfo',
+      desc: 'Um truque de Mago (trocável em cada descanso longo). Nível 3: Detectar Magia. Nível 5: Passo Nebuloso.',
+      innateSpells: [
+        magia('prestidigitacao-magica', 1, 'vontade', INT_SAB_CAR, 'Você pode trocar este truque por qualquer outro truque de Mago a cada descanso longo.'),
+        magia('detectar-magia', 3),
+        magia('passo-nebuloso', 5),
+      ],
+    },
+    {
+      id: 'elfo-floresta',
+      name: 'Elfo da Floresta',
+      desc: 'Deslocamento 10,5 m. Truque Druidismo. Nível 3: Passo Longo. Nível 5: Passar sem Rastro.',
+      innateSpells: [
+        magia('druidismo', 1, 'vontade'),
+        magia('passos-longos', 3),
+        magia('passar-sem-rastro', 5),
+      ],
+    },
   ],
 }
 
@@ -61,8 +102,18 @@ const LINHAGEM_GNOMICA: OptionGroup = {
   name: 'Linhagem Gnômica',
   desc: 'Escolha sua linhagem gnômica.',
   options: [
-    { id: 'rochas', name: 'Gnomo das Rochas', desc: 'Você conhece os truques Reparar e Ilusão Menor. Pode gastar 10 minutos para criar um dispositivo mecânico Minúsculo (caixa de música, brinquedo ou acendedor).' },
-    { id: 'floresta', name: 'Gnomo da Floresta', desc: 'Você conhece o truque Ilusão Menor e pode conjurar Falar com Animais um número de vezes igual ao seu bônus de proficiência por descanso longo.' },
+    {
+      id: 'rochas',
+      name: 'Gnomo das Rochas',
+      desc: 'Você conhece os truques Reparar e Ilusão Menor. Pode gastar 10 minutos para criar um dispositivo mecânico Minúsculo (caixa de música, brinquedo ou acendedor).',
+      innateSpells: [magia('reparar', 1, 'vontade'), magia('ilusao-menor', 1, 'vontade')],
+    },
+    {
+      id: 'floresta',
+      name: 'Gnomo da Floresta',
+      desc: 'Você conhece o truque Ilusão Menor e pode conjurar Falar com Animais um número de vezes igual ao seu bônus de proficiência por descanso longo.',
+      innateSpells: [magia('ilusao-menor', 1, 'vontade'), magia('falar-com-animais', 1, 'prof-longo')],
+    },
   ],
 }
 
@@ -71,9 +122,36 @@ const LEGADO_INFERNAL: OptionGroup = {
   name: 'Legado Infernal',
   desc: 'Escolha seu legado. Ele define sua resistência e suas magias.',
   options: [
-    { id: 'abissal', name: 'Abissal', desc: 'Resistência a dano de veneno. Truque Rajada de Veneno. Nível 3: Raio do Enfraquecimento. Nível 5: Cura de Ferimentos (Carisma, Inteligência ou Sabedoria como habilidade de conjuração).' },
-    { id: 'ctonico', name: 'Ctônico', desc: 'Resistência a dano necrótico. Truque Toque Gélido. Nível 3: Falsa Vida. Nível 5: Raio Ardente.' },
-    { id: 'infernal', name: 'Infernal', desc: 'Resistência a dano de fogo. Truque Rajada de Fogo. Nível 3: Repreensão Infernal. Nível 5: Escuridão.' },
+    {
+      id: 'abissal',
+      name: 'Abissal',
+      desc: 'Resistência a dano de veneno. Truque Rajada de Veneno. Nível 3: Raio do Enfraquecimento. Nível 5: Cura de Ferimentos (Carisma, Inteligência ou Sabedoria como habilidade de conjuração).',
+      innateSpells: [
+        magia('rajada-de-veneno', 1, 'vontade'),
+        magia('raio-do-enfraquecimento', 3),
+        magia('curar-ferimentos', 5),
+      ],
+    },
+    {
+      id: 'ctonico',
+      name: 'Ctônico',
+      desc: 'Resistência a dano necrótico. Truque Toque Gélido. Nível 3: Falsa Vida. Nível 5: Raio Ardente.',
+      innateSpells: [
+        magia('toque-gelido', 1, 'vontade'),
+        magia('sopro-de-vida', 3),
+        magia('raio-ardente', 5),
+      ],
+    },
+    {
+      id: 'infernal',
+      name: 'Infernal',
+      desc: 'Resistência a dano de fogo. Truque Rajada de Fogo. Nível 3: Repreensão Infernal. Nível 5: Escuridão.',
+      innateSpells: [
+        magia('rajada-de-fogo', 1, 'vontade'),
+        magia('repreensao-infernal', 3),
+        magia('escuridao', 5),
+      ],
+    },
   ],
 }
 
@@ -102,6 +180,7 @@ export const SPECIES: Species[] = [
       { name: 'Portador da Luz', desc: 'Você conhece o truque Luz. Carisma é sua habilidade de conjuração para ele.' },
       { name: 'Revelação Celestial', desc: 'A partir do nível 3, transforme-se (Bônus): Ceifador Necrótico, Chamas Interiores ou Asas Radiantes. Extra 1×/descanso longo: dano extra igual ao bônus de proficiência 1×/turno.' },
     ],
+    innateSpells: [magia('luz', 1, 'vontade', ['car'])],
     choices: [REVELACAO_CELESTIAL],
   },
   {
@@ -214,6 +293,7 @@ export const SPECIES: Species[] = [
       { name: 'Legado Infernal', desc: 'Escolha: Abissal (resistência a veneno; Rajada de Veneno, depois Raio do Enfraquecimento), Ctônico (resistência necrótica; Toque Gélido, depois Toque Vampírico) ou Infernal (resistência a fogo; Rajada de Fogo, depois Repreensão Infernal e Escuridão).' },
       { name: 'Presença Sobrenatural', desc: 'Você conhece o truque Taumaturgia.' },
     ],
+    innateSpells: [magia('taumaturgia', 1, 'vontade')],
     choices: [LEGADO_INFERNAL],
   },
 ]

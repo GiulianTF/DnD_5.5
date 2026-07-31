@@ -148,21 +148,10 @@ label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 5p
 .tabbar .ico { font-size: 1.2rem; line-height: 1; }
 
 /* Botão flutuante do rolador */
-.fab {
-  position: fixed;
-  right: 14px;
-  bottom: calc(72px + var(--safe-bottom));
-  z-index: 45;
-  width: 56px; height: 56px;
-  border-radius: 50%;
-  background: var(--red);
-  border: 2px solid var(--gold);
-  font-size: 1.5rem;
-  display: grid;
-  place-items: center;
-  box-shadow: 0 4px 16px rgba(0,0,0,.5);
-  padding: 0;
-}
+/*
+ * O rolador de dados agora vive na barra inferior (ver App.tsx). O botão
+ * flutuante foi removido porque cobria os controles do fim das listas no celular.
+ */
 
 /* Modais / folhas */
 .overlay {
@@ -258,8 +247,7 @@ label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 5p
   cursor: pointer;
   animation: toast-in .2s ease;
 }
-/* deixa espaço para o botão do rolador, que fica no canto direito */
-@media (min-width: 480px) { .roll-toast { left: auto; right: 82px; min-width: 320px; max-width: 520px; } }
+@media (min-width: 480px) { .roll-toast { left: auto; right: 12px; min-width: 320px; max-width: 520px; } }
 .roll-toast-info { flex: 1; min-width: 0; }
 .roll-toast-info .label {
   font-weight: 600; font-size: .88rem;
@@ -272,6 +260,12 @@ label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 5p
 .roll-toast-total.critico { color: var(--gold); text-shadow: 0 0 14px rgba(224,178,92,.5); }
 .roll-toast-total.falha { color: var(--red); }
 @keyframes toast-in { from { transform: translateY(16px); opacity: 0 } }
+
+/* Bolsa de moedas: PL / PO / PE / PP / PC lado a lado */
+.coin-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.coin-grid label { font-size: .7rem; }
+.coin-grid label .tiny { display: block; font-weight: 400; }
+.coin-grid input { padding: 8px 6px; text-align: center; }
 
 .dice-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .die-btn { font-size: .9rem; font-weight: 600; }

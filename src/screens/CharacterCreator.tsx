@@ -11,9 +11,10 @@ import { WEAPONS, ARMORS, SHIELD, GEAR, MASTERY_DESC, itemById } from '../data/e
 import { abilityMod, fmtMod, cantripLimit, preparedLimit, maxSpellLevel, masteryEligibleWeapons } from '../engine/rules'
 import { POINT_BUY_COST, STANDARD_ARRAY, emptyScores, pointBuyRemaining } from '../engine/pointbuy'
 import { roll4d6DropLowest } from '../engine/dice'
+import { purseFromGold } from '../engine/money'
 import { uid } from '../engine/uid'
 import { newCharacter, useStore } from '../store/store'
-import { Card, Choice, ChoiceGroup, Segmented } from '../components/ui'
+import { Card, Choice, ChoiceAccordion, ChoiceGroup, Segmented } from '../components/ui'
 
 const STEPS = ['Identidade', 'Espécie', 'Antecedente', 'Classe', 'Atributos', 'Perícias', 'Magias', 'Equipamento'] as const
 
@@ -22,7 +23,8 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
   const [step, setStep] = useState(0)
 
   const [name, setName] = useState('')
-  const [speciesId, setSpeciesId] = useState('humano')
+  // Nada vem pré-selecionado: cada passo exige uma escolha explícita do jogador.
+  const [speciesId, setSpeciesId] = useState('')
   const [speciesChoices, setSpeciesChoices] = useState<Record<string, string>>({})
   const [speciesSkills, setSpeciesSkills] = useState<string[]>([])
   const [originFeats, setOriginFeats] = useState<string[]>([])
@@ -30,7 +32,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
   const [bgBonuses, setBgBonuses] = useState<Partial<Record<AbilityKey, number>>>({})
   /** Regra opcional de mesa: distribuir os bônus do antecedente em qualquer atributo. */
   const [bgFree, setBgFree] = useState(false)
-  const [classId, setClassId] = useState('guerreiro')
+  const [classId, setClassId] = useState('')
   const [classChoices, setClassChoices] = useState<Record<string, string>>({})
   const [masteries, setMasteries] = useState<string[]>([])
   const [method, setMethod] = useState<AbilityMethod>('array')
@@ -42,23 +44,23 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
   const [skillProfs, setSkillProfs] = useState<string[]>([])
   const [cantrips, setCantrips] = useState<string[]>([])
   const [spells, setSpells] = useState<string[]>([])
-  const [classEquipId, setClassEquipId] = useState('A')
-  const [bgEquipId, setBgEquipId] = useState('A')
+  const [classEquipId, setClassEquipId] = useState('')
+  const [bgEquipId, setBgEquipId] = useState('')
   const [extraGold, setExtraGold] = useState(0)
   const [extraItems, setExtraItems] = useState<string[]>([])
 
-  const cls = classById(classId)!
+  const cls = classById(classId)
   const bg = BACKGROUNDS.find((b) => b.id === backgroundId)
-  const sp = SPECIES.find((s) => s.id === speciesId)!
+  const sp = SPECIES.find((s) => s.id === speciesId)
 
   // Escolhas de espécie e de classe já disponíveis no nível 1
-  const speciesGroups = (sp.choices ?? []).filter((g) => (g.level ?? 1) <= 1)
-  const classGroups = (cls.choices ?? []).filter((g) => (g.level ?? 1) <= 1)
-  const extraSkills = sp.extraSkills ?? 0
+  const speciesGroups = (sp?.choices ?? []).filter((g) => (g.level ?? 1) <= 1)
+  const classGroups = (cls?.choices ?? []).filter((g) => (g.level ?? 1) <= 1)
+  const extraSkills = sp?.extraSkills ?? 0
   const bgSkills = bg?.skills ?? []
 
-  const classEquip = cls.equipmentOptions.find((o) => o.id === classEquipId) ?? cls.equipmentOptions[0]
-  const bgEquip = bg?.equipmentOptions.find((o) => o.id === bgEquipId) ?? bg?.equipmentOptions[0]
+  const classEquip = cls?.equipmentOptions.find((o) => o.id === classEquipId)
+  const bgEquip = bg?.equipmentOptions.find((o) => o.id === bgEquipId)
 
   // Personagem provisório para consultar limites de magia e armas elegíveis à maestria
   const draft: Character = useMemo(
@@ -67,8 +69,8 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
   )
 
   // Maestria em Armas (Guerreiro 3 no nível 1; Bárbaro, Paladino, Patrulheiro e Ladino 2)
-  const masteryNeeded = cls.masteryCount?.(1) ?? 0
-  const masteryWeapons = useMemo(() => masteryEligibleWeapons(draft), [draft])
+  const masteryNeeded = cls?.masteryCount?.(1) ?? 0
+  const masteryWeapons = useMemo(() => (classId ? masteryEligibleWeapons(draft) : []), [draft, classId])
 
   const finalScores = useMemo(() => {
     const r = { ...scores }
@@ -97,20 +99,24 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
   const escolhidasDaClasse = skillProfs.filter((s) => !skillsJaConcedidas.includes(s)).length
 
   const especieOk =
-    speciesGroups.every((g) => !!speciesChoices[g.id])
+    !!sp
+    && speciesGroups.every((g) => !!speciesChoices[g.id])
     && speciesSkills.length === extraSkills
     && (!sp.extraOriginFeat || originFeats.length === 1)
+
+  /** O último passo não tem botão "Continuar"; o gate fica no botão de criar. */
+  const equipamentoOk = !!classEquip && !!bgEquip
 
   const canAdvance = (): boolean => {
     switch (step) {
       case 0: return name.trim().length > 0
-      case 1: return !!speciesId && especieOk
+      case 1: return especieOk
       case 2: return bgOk
-      case 3: return !!classId && classGroups.every((g) => !!classChoices[g.id]) && masteries.length === masteryNeeded
+      case 3: return !!cls && classGroups.every((g) => !!classChoices[g.id]) && masteries.length === masteryNeeded
       case 4: return methodComplete()
-      case 5: return escolhidasDaClasse === cls.skillCount
+      case 5: return escolhidasDaClasse === (cls?.skillCount ?? 0)
       case 6: return cantrips.length === cantripsNeeded && (spellsNeeded === 0 || spells.length === spellsNeeded)
-      default: return true
+      default: return equipamentoOk
     }
   }
 
@@ -163,6 +169,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
       spellsKnown: [...cantrips, ...spells],
       spellsPrepared: [...cantrips, ...spells],
       gold: ouroTotal,
+      coins: purseFromGold(ouroTotal),
       inventory: inventarioInicial(),
     })
     addCharacter(char)
@@ -205,9 +212,11 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
             <p className="muted tiny" style={{ marginBottom: 10 }}>
               Toque numa espécie para selecioná-la e ver os traços; use a seta para abrir sem escolher.
             </p>
+            <ChoiceAccordion>
             {SPECIES.map((s) => (
               <Choice
                 key={s.id}
+                id={s.id}
                 selected={speciesId === s.id}
                 title={s.name}
                 desc={`${s.size} · Deslocamento ${s.speed} m${s.darkvision ? ` · Visão no escuro ${s.darkvision} m` : ''}`}
@@ -236,6 +245,8 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
                 }}
               />
             ))}
+            </ChoiceAccordion>
+            {!speciesId && <div className="banner warn">Escolha uma espécie para continuar.</div>}
           </Card>
 
           {/* Escolhas obrigatórias da espécie (cor do dragão, dádiva de gigante, linhagem...) */}
@@ -249,7 +260,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
           ))}
 
           {/* Humano: perícia extra do traço Habilidoso */}
-          {extraSkills > 0 && (
+          {sp && extraSkills > 0 && (
             <Card title={`Perícia adicional (${speciesSkills.length}/${extraSkills})`}>
               <p className="muted tiny" style={{ marginBottom: 10 }}>
                 {sp.name} concede proficiência em {extraSkills} perícia à sua escolha.
@@ -273,19 +284,21 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
           )}
 
           {/* Humano: talento de Origem adicional do traço Versátil */}
-          {sp.extraOriginFeat && (
+          {sp?.extraOriginFeat && (
             <Card title="Talento de Origem adicional">
               <p className="muted tiny" style={{ marginBottom: 10 }}>
                 O traço <strong>Versátil</strong> de {sp.name} concede um talento de Origem à sua escolha,
                 além do talento que vem do seu antecedente
                 {bg ? ` (${featById(bg.featId)?.name})` : ''}.
               </p>
+              <ChoiceAccordion>
               {ORIGIN_FEATS.map((f) => {
                 const jaDoAntecedente = !!bg && f.id === bg.featId && !f.repeatable
                 const escolhido = originFeats[0] === f.id
                 return (
                   <Choice
                     key={f.id}
+                    id={f.id}
                     selected={escolhido}
                     title={f.name}
                     disabled={jaDoAntecedente}
@@ -300,6 +313,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
                   />
                 )
               })}
+              </ChoiceAccordion>
               {originFeats.length === 0 && <div className="banner warn">Escolha um talento de Origem para continuar.</div>}
             </Card>
           )}
@@ -314,9 +328,11 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
               Nenhum antecedente vem marcado. Toque em um para escolhê-lo e ver os detalhes;
               a seta abre as informações sem selecionar.
             </p>
+            <ChoiceAccordion>
             {BACKGROUNDS.map((b) => (
               <Choice
                 key={b.id}
+                id={b.id}
                 selected={backgroundId === b.id}
                 title={b.name}
                 desc={`${b.abilities.map((a) => ABILITY_NAMES[a]).join(', ')} · Talento: ${featById(b.featId)?.name}`}
@@ -332,9 +348,10 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
                     <p>Você escolhe entre este pacote e 50 PO no passo de Equipamento.</p>
                   </>
                 }
-                onClick={() => { setBackgroundId(b.id); setBgBonuses({}); setBgEquipId('A') }}
+                onClick={() => { setBackgroundId(b.id); setBgBonuses({}); setBgEquipId('') }}
               />
             ))}
+            </ChoiceAccordion>
             {!backgroundId && <div className="banner warn">Escolha um antecedente para continuar.</div>}
           </Card>
 
@@ -379,9 +396,11 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
       {step === 3 && (
         <>
           <Card title="Escolha a classe">
+            <ChoiceAccordion>
             {CLASSES.map((c) => (
               <Choice
                 key={c.id}
+                id={c.id}
                 selected={classId === c.id}
                 title={c.name}
                 desc={`Dado de Vida d${c.hitDie} · ${c.primary} · Salvaguardas: ${c.saves.map((s) => ABILITY_NAMES[s]).join(', ')}`}
@@ -407,10 +426,12 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
                   setSpells([])
                   setClassChoices({})
                   setMasteries([])
-                  setClassEquipId('A')
+                  setClassEquipId('')
                 }}
               />
             ))}
+            </ChoiceAccordion>
+            {!classId && <div className="banner warn">Escolha uma classe para continuar.</div>}
           </Card>
 
           {/* Escolhas de nível 1 da classe: Estilo de Luta, Ordem Divina, Ordem Primal... */}
@@ -424,17 +445,19 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
           ))}
 
           {/* Maestria em Armas — Guerreiro escolhe 3 armas já no nível 1 */}
-          {masteryNeeded > 0 && (
+          {cls && masteryNeeded > 0 && (
             <Card title={`Maestria em Armas (${masteries.length}/${masteryNeeded})`}>
               <p className="muted tiny" style={{ marginBottom: 10 }}>
                 Escolha {masteryNeeded} arma{masteryNeeded > 1 ? 's' : ''} com as quais {cls.name} é proficiente.
                 Você passa a usar a propriedade de maestria dessas armas.
               </p>
+              <ChoiceAccordion>
               {masteryWeapons.map((w) => {
                 const marcada = masteries.includes(w.id)
                 return (
                   <Choice
                     key={w.id}
+                    id={w.id}
                     selected={marcada}
                     title={w.name}
                     desc={`Maestria: ${w.weapon!.mastery} · ${w.weapon!.damage} ${w.weapon!.damageType} · ${w.weapon!.category}`}
@@ -448,13 +471,14 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
                   />
                 )
               })}
+              </ChoiceAccordion>
               {masteries.length !== masteryNeeded && (
                 <div className="banner warn">Escolha exatamente {masteryNeeded} arma{masteryNeeded > 1 ? 's' : ''}.</div>
               )}
             </Card>
           )}
 
-          {(cls.choices ?? []).some((g) => (g.level ?? 1) > 1) && (
+          {cls && (cls.choices ?? []).some((g) => (g.level ?? 1) > 1) && (
             <Card title="Escolhas de níveis futuros">
               <p className="muted tiny">
                 {(cls.choices ?? []).filter((g) => (g.level ?? 1) > 1)
@@ -618,7 +642,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
       )}
 
       {/* ---------- 5. PERÍCIAS ---------- */}
-      {step === 5 && (
+      {step === 5 && cls && (
         <Card title={`Escolha ${cls.skillCount} perícias de ${cls.name}`}>
           <p className="muted tiny" style={{ marginBottom: 10 }}>
             Você já é treinado em: <strong className="gold">{skillsJaConcedidas.map((s) => skillById(s).name).join(', ')}</strong>.
@@ -660,7 +684,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
       )}
 
       {/* ---------- 6. MAGIAS ---------- */}
-      {step === 6 && (
+      {step === 6 && cls && (
         <>
           {cls.caster === 'nenhum' ? (
             <Card title="Sem conjuração">
@@ -673,16 +697,19 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
             <>
               {cantripsNeeded > 0 && (
                 <Card title={`Truques (${cantrips.length}/${cantripsNeeded})`}>
-                  {availableCantrips.map((s) => (
-                    <Choice
-                      key={s.id}
-                      selected={cantrips.includes(s.id)}
-                      title={s.name}
-                      desc={`${s.school} · ${s.castingTime} · ${s.range}`}
-                      details={<p>{s.desc}</p>}
-                      onClick={() => toggle(cantrips, setCantrips, s.id, cantripsNeeded)}
-                    />
-                  ))}
+                  <ChoiceAccordion>
+                    {availableCantrips.map((s) => (
+                      <Choice
+                        key={s.id}
+                        id={s.id}
+                        selected={cantrips.includes(s.id)}
+                        title={s.name}
+                        desc={`${s.school} · ${s.castingTime} · ${s.range}`}
+                        details={<p>{s.desc}</p>}
+                        onClick={() => toggle(cantrips, setCantrips, s.id, cantripsNeeded)}
+                      />
+                    ))}
+                  </ChoiceAccordion>
                 </Card>
               )}
               {spellsNeeded > 0 && (
@@ -692,16 +719,19 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
                       ? 'Você começa com 6 magias de 1º nível no grimório.'
                       : `Você prepara ${spellsNeeded} magia(s) de até ${maxLvl}º nível.`}
                   </p>
-                  {availableSpells.map((s) => (
-                    <Choice
-                      key={s.id}
-                      selected={spells.includes(s.id)}
-                      title={`${s.name} (${s.level}º)`}
-                      desc={`${s.school} · ${s.castingTime} · ${s.range} · ${s.duration}${s.concentration ? ' · Concentração' : ''}`}
-                      details={<p>{s.desc}</p>}
-                      onClick={() => toggle(spells, setSpells, s.id, spellsNeeded)}
-                    />
-                  ))}
+                  <ChoiceAccordion>
+                    {availableSpells.map((s) => (
+                      <Choice
+                        key={s.id}
+                        id={s.id}
+                        selected={spells.includes(s.id)}
+                        title={`${s.name} (${s.level}º)`}
+                        desc={`${s.school} · ${s.castingTime} · ${s.range} · ${s.duration}${s.concentration ? ' · Concentração' : ''}`}
+                        details={<p>{s.desc}</p>}
+                        onClick={() => toggle(spells, setSpells, s.id, spellsNeeded)}
+                      />
+                    ))}
+                  </ChoiceAccordion>
                 </Card>
               )}
             </>
@@ -710,48 +740,56 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
       )}
 
       {/* ---------- 7. EQUIPAMENTO ---------- */}
-      {step === 7 && (
+      {step === 7 && cls && (
         <>
           <Card title={`Equipamento inicial de ${cls.name}`}>
             <p className="muted tiny" style={{ marginBottom: 10 }}>
-              Escolha uma das opções. Os itens vão direto para a sua mochila e as moedas para o seu ouro.
+              Escolha uma das opções. Os itens vão direto para a sua mochila e as moedas para a sua bolsa.
             </p>
-            {cls.equipmentOptions.map((o) => (
-              <Choice
-                key={o.id}
-                selected={classEquipId === o.id}
-                title={`Opção ${o.id}`}
-                desc={o.label}
-                defaultOpen={classEquipId === o.id}
-                details={
-                  <>
-                    <p><strong className="gold">Itens:</strong> {listaDeItens(o).join(', ') || 'nenhum'}</p>
-                    <p><strong className="gold">Moedas:</strong> {o.gold} PO</p>
-                  </>
-                }
-                onClick={() => setClassEquipId(o.id)}
-              />
-            ))}
-          </Card>
-
-          {bg && (
-            <Card title={`Equipamento de ${bg.name}`}>
-              {bg.equipmentOptions.map((o) => (
+            <ChoiceAccordion>
+              {cls.equipmentOptions.map((o) => (
                 <Choice
                   key={o.id}
-                  selected={bgEquipId === o.id}
+                  id={o.id}
+                  selected={classEquipId === o.id}
                   title={`Opção ${o.id}`}
                   desc={o.label}
-                  defaultOpen={bgEquipId === o.id}
+                  defaultOpen={classEquipId === o.id}
                   details={
                     <>
                       <p><strong className="gold">Itens:</strong> {listaDeItens(o).join(', ') || 'nenhum'}</p>
                       <p><strong className="gold">Moedas:</strong> {o.gold} PO</p>
                     </>
                   }
-                  onClick={() => setBgEquipId(o.id)}
+                  onClick={() => setClassEquipId(o.id)}
                 />
               ))}
+            </ChoiceAccordion>
+            {!classEquipId && <div className="banner warn">Escolha uma opção de equipamento da classe.</div>}
+          </Card>
+
+          {bg && (
+            <Card title={`Equipamento de ${bg.name}`}>
+              <ChoiceAccordion>
+                {bg.equipmentOptions.map((o) => (
+                  <Choice
+                    key={o.id}
+                    id={o.id}
+                    selected={bgEquipId === o.id}
+                    title={`Opção ${o.id}`}
+                    desc={o.label}
+                    defaultOpen={bgEquipId === o.id}
+                    details={
+                      <>
+                        <p><strong className="gold">Itens:</strong> {listaDeItens(o).join(', ') || 'nenhum'}</p>
+                        <p><strong className="gold">Moedas:</strong> {o.gold} PO</p>
+                      </>
+                    }
+                    onClick={() => setBgEquipId(o.id)}
+                  />
+                ))}
+              </ChoiceAccordion>
+              {!bgEquipId && <div className="banner warn">Escolha uma opção de equipamento do antecedente.</div>}
             </Card>
           )}
 
@@ -842,10 +880,10 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
             Continuar
           </button>
         ) : (
-          <button className="gold" style={{ flex: 2 }} onClick={finish}>✓ Criar Personagem</button>
+          <button className="gold" style={{ flex: 2 }} disabled={!equipamentoOk} onClick={finish}>✓ Criar Personagem</button>
         )}
       </div>
-      {!canAdvance() && step < STEPS.length - 1 && (
+      {!canAdvance() && (
         <div className="muted tiny center" style={{ marginBottom: 20 }}>Complete as escolhas deste passo para continuar.</div>
       )}
     </div>

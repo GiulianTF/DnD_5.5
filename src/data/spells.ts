@@ -43,9 +43,13 @@ export const SPELLS: Spell[] = [
   sp('poupar-os-mortos', 'Poupar os Moribundos', 0, 'Necromancia', ['clerigo', 'druida'], AC, '4,5 m', 'V, S', INST, 'Estabiliza uma criatura viva com 0 PV.'),
   sp('proteção-contra-laminas', 'Proteção contra Lâminas', 0, 'Abjuração', ['feiticeiro', 'bruxo', 'mago'], AC, 'Pessoal', 'V, S', '1 rodada', 'Ataques com arma contra você têm desvantagem até seu próximo turno.'),
   sp('reparar', 'Reparo Menor (Mending)', 0, 'Transmutação', ['gnomo'], AC, 'Toque', 'V, S', INST, 'Versão do truque Remendar concedida por linhagens.'),
+  sp('globos-de-luz', 'Globos de Luz (Dancing Lights)', 0, 'Ilusão', ['bardo', 'feiticeiro', 'mago'], BO, '36 m', 'V, S, M', C1M, 'Crie até 4 luzes do tamanho de tochas (ou uma forma humanoide brilhante) que você move como ação Bônus. Luz plena em 3 m.'),
 
   // ============ 1º NÍVEL ============
   sp('curar-ferimentos', 'Curar Ferimentos', 1, 'Abjuração', ['bardo', 'clerigo', 'druida', 'paladino', 'patrulheiro'], AC, 'Toque', 'V, S', INST, 'O alvo recupera 2d8 + mod. de conjuração PV. +2d8 por nível de espaço acima do 1º.'),
+  sp('falar-com-animais', 'Falar com Animais', 1, 'Adivinhação', ['bardo', 'druida', 'patrulheiro'], AC, 'Pessoal', 'V, S', '10 minutos', 'Você consegue compreender e se comunicar verbalmente com Bestas.', { r: true }),
+  sp('repreensao-infernal', 'Repreensão Infernal', 1, 'Evocação', ['bruxo', 'feiticeiro', 'mago'], RE, '18 m', 'V, S', INST, 'Reação ao sofrer dano de uma criatura visível: ela faz SG DES ou sofre 2d10 de dano de fogo (metade se passar). +1d10 por nível acima do 1º.'),
+  sp('raio-do-enfraquecimento', 'Raio do Enfraquecimento', 1, 'Necromancia', ['bruxo', 'feiticeiro', 'mago'], AC, '18 m', 'V, S', INST, 'Ataque de magia à distância: 2d6 de dano necrótico e o alvo tem desvantagem no próximo ataque com FOR antes do fim do seu próximo turno. +1d6 por nível acima do 1º.'),
   sp('palavra-de-cura', 'Palavra de Cura', 1, 'Abjuração', ['bardo', 'clerigo', 'druida'], BO, '18 m', 'V', INST, 'O alvo recupera 2d4 + mod. de conjuração PV à distância. +2d4 por nível acima.'),
   sp('bencao', 'Bênção', 1, 'Encantamento', ['clerigo', 'paladino'], AC, '9 m', 'V, S, M', C1M, 'Até 3 criaturas somam 1d4 em ataques e salvaguardas.', { c: true }),
   sp('perdicao', 'Perdição', 1, 'Encantamento', ['bardo', 'clerigo'], AC, '9 m', 'V, S, M', C1M, 'Até 3 criaturas subtraem 1d4 de ataques e salvaguardas (SG CAR).', { c: true }),

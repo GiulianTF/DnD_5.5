@@ -90,21 +90,25 @@ export default function App() {
       )}
 
       {view !== 'criar' && (
-        <>
-          <button className="fab" onClick={() => setRoller(true)} aria-label="Rolador de dados">🎲</button>
-
-          <nav className="tabbar">
-            <button className={view === 'lista' ? 'active' : ''} onClick={() => { setActive(null); setView('lista') }}>
-              <span className="ico">📚</span>Fichas
-            </button>
-            <button className={view === 'ficha' ? 'active' : ''} disabled={!char} onClick={() => char && setView('ficha')}>
-              <span className="ico">🗡</span>Personagem
-            </button>
-            <button className={view === 'nuvem' ? 'active' : ''} onClick={() => setView('nuvem')}>
-              <span className="ico">☁</span>Nuvem
-            </button>
-          </nav>
-        </>
+        /*
+         * O rolador ficava num botão flutuante que tapava os controles do fim das
+         * listas (o 🗑 da última magia, por exemplo). Agora ele é um item da barra
+         * inferior: continua a um toque de distância e não cobre mais nada.
+         */
+        <nav className="tabbar">
+          <button className={view === 'lista' ? 'active' : ''} onClick={() => { setActive(null); setView('lista') }}>
+            <span className="ico">📚</span>Fichas
+          </button>
+          <button className={view === 'ficha' ? 'active' : ''} disabled={!char} onClick={() => char && setView('ficha')}>
+            <span className="ico">🗡</span>Personagem
+          </button>
+          <button className={roller ? 'active' : ''} onClick={() => setRoller(true)}>
+            <span className="ico">🎲</span>Dados
+          </button>
+          <button className={view === 'nuvem' ? 'active' : ''} onClick={() => setView('nuvem')}>
+            <span className="ico">☁</span>Nuvem
+          </button>
+        </nav>
       )}
 
       {/* O rolador já mostra o resultado dentro dele — não duplicamos o aviso flutuante. */}

@@ -21,6 +21,27 @@ export interface Skill {
   ability: AbilityKey
 }
 
+// ---------- Magias concedidas por espécie/linhagem ----------
+/**
+ * Magia que a espécie (ou a opção de linhagem escolhida) concede de graça,
+ * independentemente da classe. Aparece na aba de Magias mesmo para quem não conjura.
+ */
+export interface InnateSpell {
+  /** id em SPELLS */
+  spellId: string
+  /** nível de personagem a partir do qual a magia fica disponível */
+  level: number
+  /**
+   * Habilidades candidatas para a conjuração. Quando há mais de uma, o PHB 2024
+   * deixa o jogador escolher — usamos a de maior valor na ficha.
+   */
+  abilities: AbilityKey[]
+  /** como pode ser conjurada sem gastar espaço de magia */
+  freeUses?: 'vontade' | 'longo' | 'prof-longo'
+  /** observação exibida junto da magia */
+  nota?: string
+}
+
 // ---------- Escolhas (traços de espécie, características de classe) ----------
 export interface ChoiceOption {
   id: string
@@ -28,6 +49,8 @@ export interface ChoiceOption {
   desc: string
   /** perícia concedida por esta opção (id de Skill) */
   grantsSkill?: string
+  /** magias concedidas por esta opção (linhagens élficas, legado infernal...) */
+  innateSpells?: InnateSpell[]
 }
 
 /** Um grupo de escolha ("Ancestral Dracônico", "Estilo de Luta", ...) com suas opções. */
@@ -69,6 +92,8 @@ export interface Species {
   extraSkills?: number
   /** a espécie concede um talento de Origem adicional (Humano) */
   extraOriginFeat?: boolean
+  /** magias concedidas pelos traços da própria espécie (Aasimar: Luz; Tiefling: Taumaturgia) */
+  innateSpells?: InnateSpell[]
 }
 
 // ---------- Antecedentes ----------
@@ -235,6 +260,25 @@ export interface Item {
 // ---------- Ficha de Personagem ----------
 export type AbilityMethod = 'pointbuy' | 'array' | 'manual'
 
+// ---------- Moedas ----------
+/** Cobre, prata, electro, ouro e platina — as cinco moedas do PHB. */
+export type CoinKey = 'pc' | 'pp' | 'pe' | 'po' | 'pl'
+
+export const COINS: CoinKey[] = ['pl', 'po', 'pe', 'pp', 'pc']
+
+export const COIN_NAMES: Record<CoinKey, string> = {
+  pl: 'Platina',
+  po: 'Ouro',
+  pe: 'Electro',
+  pp: 'Prata',
+  pc: 'Cobre',
+}
+
+/** Valor de cada moeda em peças de cobre. */
+export const COIN_VALUE: Record<CoinKey, number> = { pc: 1, pp: 10, pe: 50, po: 100, pl: 1000 }
+
+export type CoinPurse = Record<CoinKey, number>
+
 export interface InventoryEntry {
   uid: string // id único da entrada
   itemId: string
@@ -287,7 +331,10 @@ export interface Character {
   hpRolls: (number | null)[]
   hitDiceSpent: number
   inventory: InventoryEntry[]
+  /** @deprecated mantido só para fichas antigas; a bolsa real é `coins` */
   gold: number
+  /** bolsa completa: cobre, prata, electro, ouro e platina */
+  coins: CoinPurse
   spellsKnown: string[]
   spellsPrepared: string[]
   slotsSpent: Record<number, number>
