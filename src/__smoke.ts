@@ -1,0 +1,148 @@
+// Teste de fumaça das regras. Executado via esbuild + node; não faz parte do app.
+import type { Character } from './types'
+import { newCharacter } from './store/store'
+import {
+  armorClass, attackActions, maxHp, spellSlots, pactSlots, preparedLimit, cantripLimit,
+  characterResources, levelUpSummary, finalAbilities, saves, skillValues, spellcasting,
+} from './engine/rules'
+import { CLASSES } from './data/classes'
+import { SPELLS } from './data/spells'
+import { BACKGROUNDS } from './data/backgrounds'
+import { ALL_ITEMS } from './data/equipment'
+import { featById } from './data/feats'
+
+// Roda no Node via scripts/run-tests.cjs; o projeto não depende de @types/node.
+declare const process: { exitCode?: number }
+
+let falhas = 0
+const ok = (cond: boolean, msg: string) => {
+  if (!cond) { falhas++; console.log('  X ' + msg) } else console.log('  . ' + msg)
+}
+
+console.log('\n== Guerreiro nv1: cota de malha + escudo + espada longa ==')
+const g: Character = newCharacter({
+  name: 'Test', classId: 'guerreiro', speciesId: 'humano', backgroundId: 'soldado',
+  baseAbilities: { for: 15, des: 14, con: 14, int: 10, sab: 12, car: 8 },
+  backgroundBonuses: { for: 2, con: 1 },
+  inventory: [
+    { uid: 'a', itemId: 'cota-de-malha', qty: 1, equipped: true },
+    { uid: 'b', itemId: 'escudo', qty: 1, equipped: true },
+    { uid: 'c', itemId: 'espada-longa', qty: 1, equipped: true },
+  ],
+})
+const abs = finalAbilities(g)
+ok(abs.for === 17 && abs.con === 15, `atributos c/ antecedente: FOR ${abs.for}, CON ${abs.con} (esperado 17/15)`)
+ok(armorClass(g).total === 18, `CA = ${armorClass(g).total} (cota 16 + escudo 2)`)
+ok(maxHp(g) === 12, `PV = ${maxHp(g)} (d10 + 2 CON)`)
+const atk = attackActions(g)[0]
+ok(atk.attackBonus === 5, `ataque espada longa = +${atk.attackBonus} (3 FOR + 2 prof)`)
+ok(atk.damageBonus === 3 && atk.damageDice === '1d8', `dano = ${atk.damageDice}+${atk.damageBonus}`)
+
+console.log('\n== Arma magica +2 e anel de protecao ==')
+const g2: Character = {
+  ...g,
+  inventory: [
+    ...g.inventory.map((e) => (e.uid === 'c' ? { ...e, bonus: 2 } : e)),
+    { uid: 'd', itemId: 'anel-de-protecao', qty: 1, equipped: true, attuned: true },
+  ],
+}
+const atk2 = attackActions(g2)[0]
+ok(atk2.attackBonus === 7 && atk2.damageBonus === 5, `espada +2: ataque +${atk2.attackBonus}, dano +${atk2.damageBonus}`)
+ok(armorClass(g2).total === 19, `CA com anel = ${armorClass(g2).total}`)
+ok(saves(g2)[0].value === 6, `salvaguarda FOR = +${saves(g2)[0].value} (3 FOR + 2 prof + 1 anel = 6)`)
+
+console.log('\n== Amuleto da Saude recalcula CON e PV ==')
+const g3: Character = {
+  ...g, level: 5, hpRolls: [null, null, null, null],
+  inventory: [...g.inventory, { uid: 'e', itemId: 'amuleto-da-saude', qty: 1, equipped: true, attuned: true }],
+}
+const semAmuleto: Character = { ...g3, inventory: g.inventory }
+ok(finalAbilities(g3).con === 19, `CON com amuleto = ${finalAbilities(g3).con} (esperado 19)`)
+ok(maxHp(g3) === maxHp(semAmuleto) + 10, `PV subiu ${maxHp(g3) - maxHp(semAmuleto)} (+2 mod x 5 niveis)`)
+
+console.log('\n== Bracadeiras de Defesa so funcionam sem armadura ==')
+const semArm: Character = { ...g, inventory: [{ uid: 'x', itemId: 'bracadeiras-de-defesa', qty: 1, equipped: true, attuned: true }] }
+const comArm: Character = { ...g, inventory: [...g.inventory, { uid: 'x', itemId: 'bracadeiras-de-defesa', qty: 1, equipped: true, attuned: true }] }
+ok(armorClass(semArm).total === 14, `CA c/ bracadeiras sem armadura = ${armorClass(semArm).total} (10+2 DES+2)`)
+ok(armorClass(comArm).total === 18, `CA c/ bracadeiras + armadura = ${armorClass(comArm).total} (bonus ignorado)`)
+
+console.log('\n== Item de sintonizacao nao sintonizado nao aplica bonus ==')
+const naoSint: Character = { ...g, inventory: [...g.inventory, { uid: 'z', itemId: 'anel-de-protecao', qty: 1, equipped: true }] }
+ok(armorClass(naoSint).total === 18, `CA sem sintonizar o anel = ${armorClass(naoSint).total} (sem +1)`)
+
+console.log('\n== Defesas sem armadura ==')
+const b: Character = newCharacter({ classId: 'barbaro', baseAbilities: { for: 16, des: 14, con: 16, int: 8, sab: 10, car: 10 } })
+ok(armorClass(b).total === 15, `CA barbaro = ${armorClass(b).total} (10 + 2 DES + 3 CON)`)
+const m: Character = newCharacter({ classId: 'monge', baseAbilities: { for: 12, des: 16, con: 14, int: 10, sab: 15, car: 8 } })
+ok(armorClass(m).total === 15, `CA monge = ${armorClass(m).total} (10 + 3 DES + 2 SAB)`)
+
+console.log('\n== Armadura media limita bonus de DES a +2 ==')
+const med: Character = newCharacter({
+  classId: 'clerigo', baseAbilities: { for: 10, des: 18, con: 12, int: 10, sab: 16, car: 10 },
+  inventory: [{ uid: 'p', itemId: 'peitoral', qty: 1, equipped: true }],
+})
+ok(armorClass(med).total === 16, `CA peitoral c/ DES 18 = ${armorClass(med).total} (14 + 2, nao 14 + 4)`)
+
+console.log('\n== Espacos de magia ==')
+const mago: Character = newCharacter({ classId: 'mago', level: 5 })
+ok(JSON.stringify(spellSlots(mago).slice(0, 3)) === '[4,3,2]', `mago nv5 = ${spellSlots(mago).slice(0, 3)}`)
+const pal: Character = newCharacter({ classId: 'paladino', level: 5 })
+ok(spellSlots(pal)[0] === 4 && spellSlots(pal)[1] === 2, `paladino nv5 = ${spellSlots(pal).slice(0, 2)}`)
+const bruxo: Character = newCharacter({ classId: 'bruxo', level: 5 })
+ok(pactSlots(bruxo)?.count === 2 && pactSlots(bruxo)?.level === 3, `bruxo nv5 = ${JSON.stringify(pactSlots(bruxo))}`)
+ok(preparedLimit(mago) === 9 && cantripLimit(mago) === 4, `mago nv5: ${preparedLimit(mago)} preparadas, ${cantripLimit(mago)} truques`)
+
+console.log('\n== Recursos limitados ==')
+const barb5: Character = newCharacter({ classId: 'barbaro', level: 5 })
+ok(characterResources(barb5).find((r) => r.id === 'furia')?.max === 3, `furias nv5 = ${characterResources(barb5).find((r) => r.id === 'furia')?.max}`)
+const gue: Character = newCharacter({ classId: 'guerreiro', level: 2 })
+const surto = characterResources(gue).find((r) => r.id === 'surto-de-acao')
+ok(surto?.max === 1 && surto.recharge === 'curto', `surto de acao: ${surto?.max} uso, recarga ${surto?.recharge}`)
+const bardo: Character = newCharacter({ classId: 'bardo', level: 3, baseAbilities: { for: 8, des: 14, con: 12, int: 10, sab: 10, car: 16 } })
+ok(characterResources(bardo).find((r) => r.id === 'inspiracao-bardica')?.max === 3, `inspiracao bardica = ${characterResources(bardo).find((r) => r.id === 'inspiracao-bardica')?.max}`)
+
+console.log('\n== Assistente de evolucao ==')
+const r3 = levelUpSummary(newCharacter({ classId: 'guerreiro', level: 2 }), 3)!
+ok(r3.needsSubclass, 'guerreiro nv3 pede subclasse')
+const r4 = levelUpSummary(newCharacter({ classId: 'guerreiro', level: 3, subclassId: 'campeao' }), 4)!
+ok(r4.needsAsi, 'guerreiro nv4 pede incremento/talento')
+ok(r4.features.length > 0, `nv4 lista ${r4.features.length} caracteristica(s)`)
+const r5 = levelUpSummary(newCharacter({ classId: 'mago', level: 4 }), 5)!
+ok(r5.newSlots.some((s) => s.level === 3 && s.gained === 2), `mago nv5 ganha espacos de 3o: ${JSON.stringify(r5.newSlots)}`)
+const r9 = levelUpSummary(newCharacter({ classId: 'mago', level: 8 }), 9)!
+ok(r9.proficiencyBonus === 4 && r9.proficiencyChanged, 'prof sobe para +4 no nv9')
+const rSub = levelUpSummary(newCharacter({ classId: 'clerigo', level: 5, subclassId: 'vida' }), 6)!
+ok(rSub.features.some((f) => f.name === 'Curandeiro Abencoado' || f.name.includes('Curandeiro')), `nv6 clerigo da Vida traz caracteristica de subclasse: ${rSub.features.map((f) => f.name).join(', ')}`)
+
+console.log('\n== Integridade dos dados ==')
+for (const c of CLASSES) {
+  const niveis = c.features.map((f) => f.level)
+  ok(niveis.every((n) => n >= 1 && n <= 20), `${c.name}: niveis validos`)
+  ok(c.subclasses.length >= 4, `${c.name}: ${c.subclasses.length} subclasses`)
+  if (c.preparedByLevel) ok(c.preparedByLevel.length === 20, `${c.name}: tabela de preparadas com 20 entradas`)
+  if (c.cantripsByLevel) ok(c.cantripsByLevel.length === 20, `${c.name}: tabela de truques com 20 entradas`)
+  const ch = newCharacter({ classId: c.id, level: 20 })
+  ok(maxHp(ch) > 0 && armorClass(ch).total > 0 && skillValues(ch).length === 18, `${c.name} nv20: calculos ok`)
+  if (c.caster !== 'nenhum') ok(spellcasting(ch) !== null, `${c.name}: conjuracao ok`)
+  // toda classe conjuradora precisa ter magias no catalogo
+  if (c.caster !== 'nenhum') {
+    const n = SPELLS.filter((s) => s.classes.includes(c.id)).length
+    ok(n >= 10, `${c.name}: ${n} magias no catalogo`)
+  }
+}
+
+const ids = new Set<string>()
+let dup = 0
+for (const s of SPELLS) { if (ids.has(s.id)) dup++; ids.add(s.id) }
+ok(dup === 0, `magias sem ids duplicados (${SPELLS.length} magias)`)
+const itemIds = new Set<string>()
+let dupI = 0
+for (const i of ALL_ITEMS) { if (itemIds.has(i.id)) dupI++; itemIds.add(i.id) }
+ok(dupI === 0, `itens sem ids duplicados (${ALL_ITEMS.length} itens)`)
+for (const bg of BACKGROUNDS) {
+  ok(!!featById(bg.featId), `antecedente ${bg.name}: talento "${bg.featId}" existe`)
+  ok(bg.abilities.length === 3, `antecedente ${bg.name}: 3 habilidades`)
+}
+
+console.log(falhas === 0 ? '\n>>> TODOS OS TESTES DE REGRAS PASSARAM' : `\n>>> ${falhas} FALHA(S) NAS REGRAS`)
+if (falhas > 0) process.exitCode = 1
