@@ -105,6 +105,11 @@ export interface ClassResource {
   /** máximo de usos em função do nível e modificadores */
   max: (level: number, mods: AbilityScores) => number
   recharge: 'curto' | 'longo'
+  /**
+   * Recursos com recarga em descanso longo que ainda assim devolvem alguns usos
+   * em descanso curto (ex.: Retomar o Fôlego recupera 1 uso no curto e todos no longo).
+   */
+  shortRestUses?: number
   /** nível em que o recurso é adquirido */
   fromLevel: number
 }
@@ -146,6 +151,11 @@ export interface DndClass {
   equipmentOptions: EquipmentOption[]
   /** escolhas de características (Estilo de Luta, Ordem Divina, ...) */
   choices?: OptionGroup[]
+  /**
+   * Quantas armas o personagem escolhe para a característica Maestria em Armas
+   * (Guerreiro: 3 no 1º nível; Bárbaro, Paladino, Patrulheiro e Ladino: 2).
+   */
+  masteryCount?: (level: number) => number
 }
 
 // ---------- Magias ----------
@@ -263,6 +273,13 @@ export interface Character {
   classChoices: Record<string, string>
   /** talentos de Origem adicionais (ex.: traço Versátil do Humano) */
   originFeats: string[]
+  /** armas escolhidas para a característica Maestria em Armas (ids de Item) */
+  weaponMasteries: string[]
+  /**
+   * Regra opcional de mesa: distribuir os bônus do antecedente em qualquer
+   * habilidade, e não apenas nas três sugeridas pelo antecedente.
+   */
+  freeBackgroundBonuses?: boolean
   /** PV: dano sofrido (max é derivado) e PV temporário */
   damageTaken: number
   tempHp: number

@@ -5,7 +5,7 @@ import { ABILITIES } from '../types'
 import { classById, FULL_CASTER_SLOTS, HALF_CASTER_SLOTS, PACT_SLOTS } from '../data/classes'
 import { speciesById } from '../data/species'
 import { backgroundById } from '../data/backgrounds'
-import { itemById } from '../data/equipment'
+import { WEAPONS, itemById } from '../data/equipment'
 import { SKILLS } from '../data/skills'
 import { featById } from '../data/feats'
 
@@ -423,6 +423,54 @@ export function isProficientWithArmor(char: Character, item: Item): boolean {
 /** Itens sintonizados (limite 3). */
 export const attunedCount = (char: Character) => char.inventory.filter((e) => e.attuned).length
 
+// ---------- Maestria em Armas ----------
+/** Quantas armas o personagem pode escolher para a Maestria em Armas no nível atual. */
+export function weaponMasteryCount(char: Character): number {
+  const cls = classById(char.classId)
+  return cls?.masteryCount?.(char.level) ?? 0
+}
+
+/** Armas com as quais a classe é proficiente — a Maestria só pode ser escolhida entre elas. */
+export const masteryEligibleWeapons = (char: Character): Item[] =>
+  WEAPONS.filter((w) => isProficientWithWeapon(char, w))
+
+/** Maestrias escolhidas, limitadas ao total permitido pelo nível. */
+export const activeWeaponMasteries = (char: Character): Item[] =>
+  (char.weaponMasteries ?? [])
+    .map((id) => itemById(id))
+    .filter((i): i is Item => !!i?.weapon)
+    .slice(0, weaponMasteryCount(char))
+
+// ---------- Proficiências (armadura, armas, ferramentas) ----------
+export interface ProficiencyGroups {
+  armaduras: string[]
+  armas: string[]
+  ferramentas: string[]
+}
+
+/** Proficiências que não são perícias: armadura, armas e ferramentas/instrumentos. */
+export function proficiencyGroups(char: Character): ProficiencyGroups {
+  const cls = classById(char.classId)
+  const bg = backgroundById(char.backgroundId)
+  const armaduras = [...(cls?.armor ?? [])]
+  const armas = [...(cls?.weapons ?? [])]
+  const ferramentas: string[] = []
+  if (bg?.tool) ferramentas.push(`${bg.tool} (antecedente ${bg.name})`)
+
+  // Opções escolhidas que ampliam as proficiências (Ordem Divina, Ordem Primal, Treinamento Marcial...)
+  for (const { chosen } of characterChoices(char)) {
+    if (!chosen) continue
+    if (chosen.id === 'protetor') { armas.push('Marciais (Ordem Divina)'); armaduras.push('Pesada (Ordem Divina)') }
+    if (chosen.id === 'guardiao') { armas.push('Marciais (Ordem Primal)'); armaduras.push('Média (Ordem Primal)') }
+  }
+
+  return {
+    armaduras: [...new Set(armaduras)],
+    armas: [...new Set(armas)],
+    ferramentas,
+  }
+}
+
 // ---------- Recursos limitados ----------
 export interface ResourceState {
   id: string
@@ -430,6 +478,8 @@ export interface ResourceState {
   max: number
   used: number
   recharge: 'curto' | 'longo'
+  /** usos devolvidos por um descanso curto quando a recarga completa é no longo */
+  shortRestUses?: number
 }
 
 export function characterResources(char: Character): ResourceState[] {
@@ -444,6 +494,7 @@ export function characterResources(char: Character): ResourceState[] {
       max: Math.max(0, r.max(char.level, abs)),
       used: char.resourcesUsed[r.id] ?? 0,
       recharge: r.recharge,
+      shortRestUses: r.shortRestUses,
     }))
 
   // Recursos de espécie

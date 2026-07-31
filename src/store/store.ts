@@ -22,6 +22,7 @@ export const newCharacter = (partial: Partial<Character> = {}): Character => ({
   speciesChoices: {},
   classChoices: {},
   originFeats: [],
+  weaponMasteries: [],
   damageTaken: 0,
   tempHp: 0,
   hpRolls: [],
@@ -48,6 +49,7 @@ export const normalizeCharacter = (c: Character): Character => ({
   speciesChoices: c.speciesChoices ?? {},
   classChoices: c.classChoices ?? {},
   originFeats: c.originFeats ?? [],
+  weaponMasteries: c.weaponMasteries ?? [],
   asiChoices: c.asiChoices ?? [],
   skillProfs: c.skillProfs ?? [],
   inventory: c.inventory ?? [],
@@ -161,7 +163,11 @@ export const useStore = create<AppState>()(
         get().updateCharacter(id, (c) => {
           const resources = characterResources(c)
           const used = { ...c.resourcesUsed }
-          for (const r of resources) if (r.recharge === 'curto') used[r.id] = 0
+          for (const r of resources) {
+            if (r.recharge === 'curto') used[r.id] = 0
+            // Recursos de descanso longo que devolvem alguns usos no curto (Retomar o Fôlego)
+            else if (r.shortRestUses) used[r.id] = Math.max(0, (used[r.id] ?? 0) - r.shortRestUses)
+          }
           // Bruxo recupera espaços de Pacto em descanso curto
           const cls = classById(c.classId)
           return {

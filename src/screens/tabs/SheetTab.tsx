@@ -4,7 +4,7 @@ import { ABILITIES, ABILITY_NAMES } from '../../types'
 import {
   abilityMods, armorClass, characterChoices, characterFeats, characterResources, currentHp,
   finalAbilities, fmtMod, initiative, maxHp, passivePerception, proficiencyBonus, saves,
-  skillValues, speed, spellcasting, unlockedFeatures,
+  speed, spellcasting, unlockedFeatures,
 } from '../../engine/rules'
 import { FEAT_CATEGORY_NAMES } from '../../data/feats'
 import { useStore } from '../../store/store'
@@ -39,9 +39,13 @@ export function SheetTab({ char }: { char: Character }) {
   }
 
   const doShortRest = () => {
+    const parciais = resources.filter((r) => r.shortRestUses && r.used > 0)
     shortRest(char.id)
-    setRestMsg(['Recursos com recarga em descanso curto foram restaurados.',
-      cls?.caster === 'pacto' ? 'Espaços de Pacto recuperados.' : ''].filter(Boolean))
+    setRestMsg([
+      'Recursos com recarga em descanso curto foram restaurados.',
+      ...parciais.map((r) => `${r.name}: +${Math.min(r.shortRestUses!, r.used)} uso recuperado.`),
+      cls?.caster === 'pacto' ? 'Espaços de Pacto recuperados.' : '',
+    ].filter(Boolean))
     setRestSheet('curto')
   }
 
@@ -150,7 +154,9 @@ export function SheetTab({ char }: { char: Character }) {
                   <div style={{ flex: 1 }}>
                     <strong style={{ fontSize: '.92rem' }}>{r.name}</strong>
                     <div className="tiny muted">
-                      Recarrega em descanso {r.recharge}
+                      {r.shortRestUses
+                        ? `Recupera ${r.shortRestUses} uso no descanso curto · todos no longo`
+                        : `Recarrega em descanso ${r.recharge}`}
                       {esgotado && <span style={{ color: 'var(--red)' }}> · ESGOTADA</span>}
                     </div>
                   </div>
@@ -181,19 +187,6 @@ export function SheetTab({ char }: { char: Character }) {
             </button>
           ))}
         </div>
-      </Card>
-
-      {/* --- Perícias --- */}
-      <Card title="Perícias">
-        {skillValues(char).map((s) => (
-          <button key={s.id} className="list-item" style={{ textAlign: 'left', width: '100%' }}
-            onClick={() => doRoll(s.name, s.value)}>
-            <div className="spread">
-              <span>{s.proficient ? '⬤' : '○'} {s.name} <span className="muted tiny">({ABILITY_NAMES[s.ability].slice(0, 3)})</span></span>
-              <strong>{fmtMod(s.value)}</strong>
-            </div>
-          </button>
-        ))}
       </Card>
 
       {/* --- Características --- */}
