@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { AbilityKey, AbilityMethod, AbilityScores, Character, EquipmentOption, InventoryEntry } from '../types'
 import { ABILITIES, ABILITY_NAMES } from '../types'
 import { SPECIES } from '../data/species'
@@ -9,8 +9,8 @@ import { SPELLS } from '../data/spells'
 import { ORIGIN_FEATS, featById } from '../data/feats'
 import { WEAPONS, ARMORS, SHIELD, GEAR, MASTERY_DESC, itemById } from '../data/equipment'
 import {
-  abilityMod, fmtMod, cantripLimit, innateSpells, preparedLimit, maxSpellLevel,
-  masteryEligibleWeapons, spellPickGroups,
+  PREPARATION_RULES, abilityMod, fmtMod, cantripLimit, innateSpells, preparationMode, preparedLimit,
+  maxSpellLevel, masteryEligibleWeapons, spellPickGroups,
 } from '../engine/rules'
 import { POINT_BUY_COST, STANDARD_ARRAY, emptyScores, pointBuyRemaining } from '../engine/pointbuy'
 import { roll4d6DropLowest } from '../engine/dice'
@@ -24,6 +24,11 @@ const STEPS = ['Identidade', 'Espécie', 'Antecedente', 'Classe', 'Atributos', '
 export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
   const addCharacter = useStore((s) => s.addCharacter)
   const [step, setStep] = useState(0)
+
+  // Cada passo começa do começo: sem isto o passo novo abre no meio da rolagem do anterior.
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'auto' })
+  }, [step])
 
   const [name, setName] = useState('')
   // Nada vem pré-selecionado: cada passo exige uma escolha explícita do jogador.
@@ -94,6 +99,8 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
   const cantripsNeeded = cantripLimit(draft)
   const spellsNeeded = classId === 'mago' ? 6 : (preparedLimit(draft) ?? 0)
   const maxLvl = maxSpellLevel(draft)
+  const modoDePreparacao = classId ? preparationMode(draft) : null
+  const regraDePreparacao = modoDePreparacao ? PREPARATION_RULES[modoDePreparacao] : null
 
   const classSpells = SPELLS.filter((s) => s.classes.includes(classId))
   const availableCantrips = classSpells.filter((s) => s.level === 0)
@@ -752,8 +759,14 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
                 <Card title={`${classId === 'mago' ? 'Magias no grimório' : 'Magias preparadas'} (${spells.length}/${spellsNeeded})`}>
                   <p className="muted tiny" style={{ marginBottom: 10 }}>
                     {classId === 'mago'
-                      ? 'Você começa com 6 magias de 1º nível no grimório.'
+                      ? 'Você começa com 6 magias de 1º nível no grimório e prepara, entre elas, as que vai conjurar no dia.'
                       : `Você prepara ${spellsNeeded} magia(s) de até ${maxLvl}º nível.`}
+                    {regraDePreparacao && (
+                      <>
+                        {' '}<strong className="gold">{regraDePreparacao.quando}</strong> você pode
+                        mudar {regraDePreparacao.quantas.toLowerCase()}. {regraDePreparacao.texto}
+                      </>
+                    )}
                   </p>
                   <ChoiceAccordion>
                     {availableSpells.map((s) => (

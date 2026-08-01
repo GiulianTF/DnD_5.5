@@ -62,6 +62,16 @@ export interface SpellPick {
   fromClasses: string[]
   /** círculo exato das magias oferecidas (0 = truques) */
   spellLevel: number
+  /**
+   * Em vez de um círculo exato, oferece qualquer magia de `spellLevel` até o
+   * maior círculo para o qual o personagem tem espaços (Segredos Mágicos).
+   */
+  upToMaxSlot?: boolean
+  /**
+   * As magias escolhidas ficam sempre preparadas e são conjuradas gastando
+   * espaços de magia normais — e não como magias inatas com usos grátis.
+   */
+  alwaysPrepared?: boolean
   /** escolas permitidas, quando a fonte restringe */
   schools?: string[]
   /** habilidades candidatas para a conjuração */
@@ -70,6 +80,21 @@ export interface SpellPick {
   freeUses?: InnateSpell['freeUses']
   /** observação exibida junto da escolha */
   nota?: string
+}
+
+// ---------- Magias sempre preparadas ----------
+/**
+ * Magia que uma característica (subclasse, opção de subclasse) mantém SEMPRE
+ * preparada. Diferente de `InnateSpell`, ela é conjurada normalmente, gastando
+ * um espaço de magia — o que a regra concede é a preparação, que não ocupa
+ * vaga na lista de magias preparadas da classe (PHB 2024, "Magias Sempre
+ * Preparadas").
+ */
+export interface AlwaysPreparedSpell {
+  /** nível de personagem a partir do qual a magia fica preparada */
+  level: number
+  /** id em SPELLS */
+  spellId: string
 }
 
 // ---------- Escolhas (traços de espécie, características de classe) ----------
@@ -83,6 +108,12 @@ export interface ChoiceOption {
   innateSpells?: InnateSpell[]
   /** magias que esta opção deixa o jogador escolher */
   spellPicks?: SpellPick[]
+  /** magias que esta opção deixa sempre preparadas (terreno do Círculo da Terra) */
+  alwaysPrepared?: AlwaysPreparedSpell[]
+  /** treinamento com armadura concedido pela opção (Ordem Divina: Protetor) */
+  armor?: string[]
+  /** proficiência com armas concedida pela opção */
+  weapons?: string[]
 }
 
 /** Um grupo de escolha ("Ancestral Dracônico", "Estilo de Luta", ...) com suas opções. */
@@ -183,12 +214,54 @@ export interface ClassFeature {
   desc: string
 }
 
+/**
+ * Conjuração concedida por uma subclasse de classe não conjuradora
+ * (Cavaleiro Místico e Trapaceiro Arcano: 1/3 de conjurador, lista de Mago).
+ */
+export interface SubclassSpellcasting {
+  /** id da classe cuja lista de magias é usada */
+  list: string
+  ability: AbilityKey
+  /** nível de personagem em que a conjuração começa */
+  fromLevel: number
+  /** magias preparadas por nível de personagem (índice 0 = nível 1) */
+  preparedByLevel: number[]
+  /** truques conhecidos por nível de personagem */
+  cantripsByLevel: number[]
+}
+
 export interface Subclass {
   id: string
   name: string
   desc: string
   features: ClassFeature[]
+  /** magias sempre preparadas concedidas pela subclasse (Domínio Divino, Patrono...) */
+  alwaysPrepared?: AlwaysPreparedSpell[]
+  /** escolhas próprias da subclasse (terreno do Círculo da Terra) */
+  choices?: OptionGroup[]
+  /** magias que a subclasse deixa o jogador escolher (Segredos Mágicos) */
+  spellPicks?: SpellPick[]
+  /** treinamento com armadura concedido pela subclasse (Colégio da Bravura) */
+  armor?: string[]
+  /** proficiência com armas concedida pela subclasse */
+  weapons?: string[]
+  /** conjuração de 1/3 concedida pela subclasse */
+  spellcasting?: SubclassSpellcasting
 }
+
+/**
+ * Quando e quanto o personagem pode mudar a lista de magias preparadas
+ * (PHB 2024, tabela "Magias Preparadas por Classe").
+ */
+export type PreparationMode =
+  /** Clérigo e Druida: em cada Descanso Longo, qualquer quantidade, de toda a lista da classe */
+  | 'descanso-todas'
+  /** Mago: em cada Descanso Longo, qualquer quantidade, entre as magias do grimório */
+  | 'grimorio'
+  /** Paladino e Patrulheiro: em cada Descanso Longo, uma magia */
+  | 'descanso-uma'
+  /** Bardo, Bruxo e Feiticeiro: ao subir de nível, uma magia */
+  | 'nivel-uma'
 
 export interface DndClass {
   id: string
@@ -204,6 +277,8 @@ export interface DndClass {
   spellAbility?: AbilityKey
   /** magias preparadas conforme tabela da classe (PHB 2024) por nível */
   preparedByLevel?: number[]
+  /** quando a classe pode trocar as magias preparadas */
+  preparation?: PreparationMode
   /** truques conhecidos por nível */
   cantripsByLevel?: number[]
   features: ClassFeature[]
@@ -214,6 +289,8 @@ export interface DndClass {
   equipmentOptions: EquipmentOption[]
   /** escolhas de características (Estilo de Luta, Ordem Divina, ...) */
   choices?: OptionGroup[]
+  /** magias que a própria classe deixa escolher (Arcanum Místico do Bruxo) */
+  spellPicks?: SpellPick[]
   /**
    * Quantas armas o personagem escolhe para a característica Maestria em Armas
    * (Guerreiro: 3 no 1º nível; Bárbaro, Paladino, Patrulheiro e Ladino: 2).
@@ -407,6 +484,13 @@ export interface Character {
   coins: CoinPurse
   spellsKnown: string[]
   spellsPrepared: string[]
+  /**
+   * Trocas de magia preparada disponíveis agora. Classes que trocam uma magia
+   * por Descanso Longo (Paladino, Patrulheiro) recebem 1 a cada descanso longo;
+   * as que trocam ao subir de nível (Bardo, Bruxo, Feiticeiro) recebem 1 a cada
+   * nível. Clérigo, Druida e Mago trocam à vontade e não usam este contador.
+   */
+  spellSwaps: number
   /**
    * Magias escolhidas em cada grupo concedido fora da classe (espécie, talentos,
    * estilos de luta): { 'alto-elfo-truque': ['prestidigitacao-arcana'] }.

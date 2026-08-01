@@ -6,7 +6,7 @@ import { emptyPurse, purseFromGold } from '../engine/money'
 import { classById } from '../data/classes'
 import { rollHitDie } from '../engine/dice'
 import { uid } from '../engine/uid'
-import { abilityMods, characterResources, maxHp } from '../engine/rules'
+import { abilityMods, characterResources, maxHp, preparationMode } from '../engine/rules'
 
 export const newCharacter = (partial: Partial<Character> = {}): Character => ({
   id: uid(),
@@ -33,6 +33,7 @@ export const newCharacter = (partial: Partial<Character> = {}): Character => ({
   coins: emptyPurse(),
   spellsKnown: [],
   spellsPrepared: [],
+  spellSwaps: 0,
   spellPicks: {},
   slotsSpent: {},
   pactSlotsSpent: 0,
@@ -59,6 +60,7 @@ export const normalizeCharacter = (c: Character): Character => ({
   hpRolls: c.hpRolls ?? [],
   spellsKnown: c.spellsKnown ?? [],
   spellsPrepared: c.spellsPrepared ?? [],
+  spellSwaps: c.spellSwaps ?? 0,
   spellPicks: c.spellPicks ?? {},
   slotsSpent: c.slotsSpent ?? {},
   resourcesUsed: c.resourcesUsed ?? {},
@@ -195,6 +197,8 @@ export const useStore = create<AppState>()(
             pactSlotsSpent: 0,
             resourcesUsed: used,
             hitDiceSpent: Math.max(0, c.hitDiceSpent - recovered),
+            // Paladino e Patrulheiro trocam uma magia preparada por descanso longo.
+            spellSwaps: preparationMode(c) === 'descanso-uma' ? 1 : c.spellSwaps,
           }
         }),
 

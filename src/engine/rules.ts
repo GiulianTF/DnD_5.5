@@ -1,9 +1,11 @@
 import type {
-  AbilityKey, AbilityScores, Character, ChoiceOption, InnateSpell, Item, InventoryEntry,
-  OptionGroup, Spell, SpellPick,
+  AbilityKey, AbilityScores, AlwaysPreparedSpell, Character, ChoiceOption, InnateSpell, Item,
+  InventoryEntry, OptionGroup, PreparationMode, Spell, SpellPick, Subclass,
 } from '../types'
 import { ABILITIES } from '../types'
-import { classById, FULL_CASTER_SLOTS, HALF_CASTER_SLOTS, PACT_SLOTS } from '../data/classes'
+import {
+  classById, FULL_CASTER_SLOTS, HALF_CASTER_SLOTS, PACT_SLOTS, THIRD_CASTER_SLOTS,
+} from '../data/classes'
 import { speciesById } from '../data/species'
 import { backgroundById } from '../data/backgrounds'
 import { WEAPONS, itemById } from '../data/equipment'
@@ -16,10 +18,14 @@ export const fmtMod = (n: number) => (n >= 0 ? `+${n}` : `${n}`)
 
 export const proficiencyBonus = (level: number) => 2 + Math.floor((level - 1) / 4)
 
-// ---------- Escolhas de espécie e de classe ----------
+/** A subclasse escolhida, quando já existe. */
+export const subclassOf = (char: Character): Subclass | null =>
+  classById(char.classId)?.subclasses.find((s) => s.id === char.subclassId) ?? null
+
+// ---------- Escolhas de espécie, de classe e de subclasse ----------
 /** Um grupo de escolha junto com a opção que o personagem selecionou (se houver). */
 export interface ResolvedChoice {
-  source: 'especie' | 'classe'
+  source: 'especie' | 'classe' | 'subclasse'
   group: OptionGroup
   chosen: ChoiceOption | null
 }
@@ -35,6 +41,8 @@ export function characterChoices(char: Character, uptoLevel = char.level): Resol
   }
   push('especie', speciesById(char.speciesId)?.choices, char.speciesChoices ?? {})
   push('classe', classById(char.classId)?.choices, char.classChoices ?? {})
+  // Escolhas da subclasse (terreno do Círculo da Terra) moram no mesmo balde da classe.
+  push('subclasse', subclassOf(char)?.choices, char.classChoices ?? {})
   return out
 }
 
@@ -306,18 +314,30 @@ export function passivePerception(char: Character): number {
 }
 
 // ---------- Conjuração ----------
+/**
+ * Conjuração concedida pela subclasse a uma classe que não conjura
+ * (Cavaleiro Místico e Trapaceiro Arcano), quando já está desbloqueada.
+ */
+export function subclassSpellcasting(char: Character) {
+  const sc = subclassOf(char)?.spellcasting
+  return sc && char.level >= sc.fromLevel ? sc : null
+}
+
 export function spellcasting(char: Character) {
   const cls = classById(char.classId)
-  if (!cls || cls.caster === 'nenhum' || !cls.spellAbility) return null
+  if (!cls) return null
+  const sub = subclassSpellcasting(char)
+  const ability = sub?.ability ?? (cls.caster !== 'nenhum' ? cls.spellAbility : undefined)
+  if (!ability) return null
   const mods = abilityMods(char)
   const pb = proficiencyBonus(char.level)
-  const mod = mods[cls.spellAbility]
+  const mod = mods[ability]
   return {
-    ability: cls.spellAbility,
+    ability,
     mod,
     attackBonus: mod + pb,
     saveDC: 8 + mod + pb,
-    caster: cls.caster,
+    caster: sub ? ('terco' as const) : cls.caster,
   }
 }
 
@@ -326,6 +346,7 @@ export function spellSlots(char: Character): number[] {
   const cls = classById(char.classId)
   if (!cls) return []
   const lv = Math.min(20, Math.max(1, char.level))
+  if (subclassSpellcasting(char)) return [...THIRD_CASTER_SLOTS[lv - 1], 0, 0, 0, 0, 0]
   if (cls.caster === 'completo') return FULL_CASTER_SLOTS[lv - 1]
   if (cls.caster === 'meio') return [...HALF_CASTER_SLOTS[lv - 1], 0, 0, 0, 0]
   return []
@@ -339,23 +360,145 @@ export function pactSlots(char: Character): { count: number; level: number } | n
 }
 
 export function preparedLimit(char: Character): number | null {
-  const cls = classById(char.classId)
-  if (!cls?.preparedByLevel) return null
-  return cls.preparedByLevel[Math.min(20, char.level) - 1]
+  const tabela = subclassSpellcasting(char)?.preparedByLevel ?? classById(char.classId)?.preparedByLevel
+  if (!tabela) return null
+  return tabela[Math.min(20, char.level) - 1]
 }
 
 /** Opções de classe que concedem um truque extra da própria lista da classe. */
 const TRUQUE_EXTRA_DE_CLASSE = ['taumaturgo', 'mago-primal']
 
 export function cantripLimit(char: Character): number {
-  const cls = classById(char.classId)
-  if (!cls?.cantripsByLevel) return 0
-  const base = cls.cantripsByLevel[Math.min(20, char.level) - 1]
-  // Ordem Divina (Taumaturgo) e Ordem Primal (Mago Primal) dão mais um truque.
+  const tabela = subclassSpellcasting(char)?.cantripsByLevel ?? classById(char.classId)?.cantripsByLevel
+  if (!tabela) return 0
+  const base = tabela[Math.min(20, char.level) - 1]
+  // Ordem Divina (Taumaturgo) e Ordem Primal (Xamã) dão mais um truque.
   const extra = characterChoices(char).some(
     (c) => c.source === 'classe' && c.chosen && TRUQUE_EXTRA_DE_CLASSE.includes(c.chosen.id),
   ) ? 1 : 0
   return base + extra
+}
+
+// ---------- Preparação de magias ----------
+/** Como esta ficha muda a lista de magias preparadas (PHB 2024). */
+export function preparationMode(char: Character): PreparationMode | null {
+  // Cavaleiro Místico e Trapaceiro Arcano trocam uma magia ao subir de nível.
+  if (subclassSpellcasting(char)) return 'nivel-uma'
+  return classById(char.classId)?.preparation ?? null
+}
+
+/** Texto da regra de troca, exibido junto da lista de magias preparadas. */
+export const PREPARATION_RULES: Record<PreparationMode, { quando: string; quantas: string; texto: string }> = {
+  'descanso-todas': {
+    quando: 'Ao completar um Descanso Longo',
+    quantas: 'Qualquer quantidade',
+    texto: 'Sempre que completar um Descanso Longo você redefine a lista inteira, escolhendo livremente entre todas as magias da sua classe para as quais você tem espaços de magia.',
+  },
+  'grimorio': {
+    quando: 'Ao completar um Descanso Longo',
+    quantas: 'Qualquer quantidade',
+    texto: 'Sempre que completar um Descanso Longo você redefine a lista inteira, escolhendo entre as magias do seu grimório.',
+  },
+  'descanso-uma': {
+    quando: 'Ao completar um Descanso Longo',
+    quantas: 'Uma magia',
+    texto: 'A cada Descanso Longo você pode substituir uma magia da lista por outra da sua classe para a qual tenha espaços de magia.',
+  },
+  'nivel-uma': {
+    quando: 'Ao subir de nível',
+    quantas: 'Uma magia',
+    texto: 'Sempre que ganha um nível nesta classe você pode substituir uma magia da lista por outra para a qual tenha espaços de magia.',
+  },
+}
+
+/** Ids das classes cujas listas de magia esta ficha pode preparar. */
+export function spellListClasses(char: Character): string[] {
+  const sub = subclassSpellcasting(char)
+  if (sub) return [sub.list]
+  // Bardo nível 10 (Segredos Mágicos): as novas magias podem vir de outras listas.
+  if (char.classId === 'bardo' && char.level >= 10) return ['bardo', 'clerigo', 'druida', 'mago']
+  return [char.classId]
+}
+
+/** Truques que a ficha pode escolher (lista da classe ou da subclasse conjuradora). */
+export function availableCantrips(char: Character): Spell[] {
+  const listas = spellListClasses(char)
+  return SPELLS.filter((s) => s.level === 0 && s.classes.some((c) => listas.includes(c)))
+}
+
+/** Todas as magias de 1º círculo ou superior da lista da classe até o círculo acessível. */
+export function classSpellCatalog(char: Character): Spell[] {
+  const maxLvl = maxSpellLevel(char)
+  const listas = spellListClasses(char)
+  return SPELLS.filter((s) => s.level >= 1 && s.level <= maxLvl && s.classes.some((c) => listas.includes(c)))
+}
+
+/**
+ * Magias de 1º círculo ou superior entre as quais é possível preparar. Para o
+ * Mago, só as do grimório; para as demais classes, toda a lista da classe.
+ */
+export function preparableSpells(char: Character): Spell[] {
+  const maxLvl = maxSpellLevel(char)
+  if (preparationMode(char) === 'grimorio') {
+    return char.spellsKnown
+      .map((id) => spellById(id))
+      .filter((s): s is Spell => !!s && s.level >= 1 && s.level <= maxLvl)
+      .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
+  }
+  return classSpellCatalog(char)
+}
+
+/** Magias preparadas que ocupam vaga no limite da classe (as automáticas não contam). */
+export function preparedSpellIds(char: Character): string[] {
+  const automaticas = new Set(alwaysPreparedSpells(char).map((m) => m.spell.id))
+  return [...new Set(char.spellsPrepared)]
+    .filter((id) => (spellById(id)?.level ?? 0) > 0 && !automaticas.has(id))
+}
+
+/** Truques conhecidos que ocupam vaga no limite de truques. */
+export function knownCantripIds(char: Character): string[] {
+  const automaticas = new Set(alwaysPreparedSpells(char).map((m) => m.spell.id))
+  return [...new Set(char.spellsKnown)]
+    .filter((id) => spellById(id)?.level === 0 && !automaticas.has(id))
+}
+
+// ---------- Magias sempre preparadas (subclasse) ----------
+export interface ResolvedAlwaysPrepared {
+  spell: Spell
+  /** de onde veio: "Domínio da Vida", "Terreno do Círculo da Terra: Polar" */
+  source: string
+}
+
+/**
+ * Magias que uma característica mantém sempre preparadas — magias de domínio,
+ * de patrono, de juramento, do círculo druídico e afins. Elas gastam espaços de
+ * magia normalmente e NÃO ocupam vaga na lista de magias preparadas.
+ */
+export function alwaysPreparedSpells(char: Character): ResolvedAlwaysPrepared[] {
+  const out: ResolvedAlwaysPrepared[] = []
+  const vistos = new Set<string>()
+  const add = (lista: AlwaysPreparedSpell[] | undefined, source: string) => {
+    for (const it of lista ?? []) {
+      if (char.level < it.level || vistos.has(it.spellId)) continue
+      const spell = spellById(it.spellId)
+      if (!spell) continue
+      vistos.add(spell.id)
+      out.push({ spell, source })
+    }
+  }
+
+  const sub = subclassOf(char)
+  if (sub) add(sub.alwaysPrepared, sub.name)
+  for (const { group, chosen } of characterChoices(char)) {
+    if (chosen?.alwaysPrepared) add(chosen.alwaysPrepared, `${group.name}: ${chosen.name}`)
+  }
+  // Grupos de escolha marcados como "sempre preparada" (Segredos Mágicos do Colégio do Conhecimento)
+  for (const { pick, chosen } of spellPickGroups(char)) {
+    if (!pick.alwaysPrepared) continue
+    add(chosen.map((spellId) => ({ spellId, level: pick.level })), pick.source)
+  }
+
+  return out.sort((a, b) => a.spell.level - b.spell.level || a.spell.name.localeCompare(b.spell.name))
 }
 
 // ---------- Magias concedidas pela espécie ----------
@@ -405,6 +548,10 @@ export function spellPickGroups(
 
   const sp = speciesById(char.speciesId)
   if (sp?.spellPicks) picks.push(...sp.spellPicks)
+  const cls = classById(char.classId)
+  if (cls?.spellPicks) picks.push(...cls.spellPicks)
+  const sub = subclassOf(char)
+  if (sub?.spellPicks) picks.push(...sub.spellPicks)
   for (const { chosen } of characterChoices(char, uptoLevel)) {
     if (chosen?.spellPicks) picks.push(...chosen.spellPicks)
   }
@@ -413,12 +560,14 @@ export function spellPickGroups(
     if (feat?.spellPicks) picks.push(...feat.spellPicks)
   }
 
+  // Segredos Mágicos e afins oferecem qualquer círculo até o maior acessível.
+  const teto = maxSpellLevel({ ...char, level: uptoLevel })
   const vistos = new Set<string>()
   return picks
     .filter((p) => p.level <= uptoLevel && !vistos.has(p.id) && vistos.add(p.id) !== undefined)
     .map((pick) => {
       const options = SPELLS.filter(
-        (s) => s.level === pick.spellLevel
+        (s) => (pick.upToMaxSlot ? s.level >= pick.spellLevel && s.level <= teto : s.level === pick.spellLevel)
           && s.classes.some((c) => pick.fromClasses.includes(c))
           && (!pick.schools || pick.schools.includes(s.school)),
       )
@@ -455,7 +604,10 @@ export function innateSpells(char: Character): ResolvedInnateSpell[] {
   }
   fontes.push(...featInnateSpells(char))
   // As magias escolhidas nos grupos entram como se fossem concedidas pela fonte.
+  // As marcadas como `alwaysPrepared` são conjuradas com espaços normais e
+  // aparecem em `alwaysPreparedSpells`, não aqui.
   for (const { pick, chosen } of spellPickGroups(char)) {
+    if (pick.alwaysPrepared) continue
     fontes.push({
       source: pick.source,
       lista: chosen.map((spellId) => ({
@@ -544,31 +696,50 @@ export function attackActions(char: Character): AttackAction[] {
     })
 }
 
+/**
+ * Todo o treinamento com armadura: o da classe mais o concedido por escolhas
+ * (Ordem Divina do Clérigo, Ordem Primal do Druida) e pela subclasse
+ * (Treinamento Marcial do Colégio da Bravura).
+ */
+export function armorTraining(char: Character): string[] {
+  const out = [...(classById(char.classId)?.armor ?? [])]
+  for (const { chosen } of characterChoices(char)) out.push(...(chosen?.armor ?? []))
+  out.push(...(subclassOf(char)?.armor ?? []))
+  return [...new Set(out)]
+}
+
+/** Todas as proficiências com armas, das mesmas fontes de `armorTraining`. */
+export function weaponTraining(char: Character): string[] {
+  const out = [...(classById(char.classId)?.weapons ?? [])]
+  for (const { chosen } of characterChoices(char)) out.push(...(chosen?.weapons ?? []))
+  out.push(...(subclassOf(char)?.weapons ?? []))
+  return [...new Set(out)]
+}
+
 export function isProficientWithWeapon(char: Character, item: Item): boolean {
-  const cls = classById(char.classId)
-  if (!cls || !item.weapon) return false
-  const cat = item.weapon.category
-  const list = cls.weapons.join(' ').toLowerCase()
-  if (cat === 'simples' && list.includes('simples')) return true
-  if (cat === 'marcial') {
-    if (list.includes('marciais') && !list.includes('marciais com')) return true
-    // Ladino/Monge: marciais com Leve ou Acuidade
-    if (list.includes('marciais com')) {
-      if (cls.id === 'ladino') return !!(item.weapon.finesse || item.weapon.light)
-      if (cls.id === 'monge') return !!item.weapon.light
+  const wp = item.weapon
+  if (!wp) return false
+  for (const entrada of weaponTraining(char).map((w) => w.toLowerCase())) {
+    if (wp.category === 'simples') {
+      if (entrada.includes('simples')) return true
+      continue
     }
+    if (!entrada.includes('marciais')) continue
+    // "Marciais com propriedade Leve (ou Acuidade)" — Ladino e Monge
+    if (!entrada.includes('com propriedade')) return true
+    if (entrada.includes('leve') && wp.light) return true
+    if (entrada.includes('acuidade') && wp.finesse) return true
   }
   return false
 }
 
 export function isProficientWithArmor(char: Character, item: Item): boolean {
-  const cls = classById(char.classId)
-  if (!cls) return false
-  if (item.kind === 'escudo') return cls.armor.includes('Escudos')
+  const treino = armorTraining(char)
+  if (item.kind === 'escudo') return treino.includes('Escudos')
   const cat = item.armor?.category
-  if (cat === 'leve') return cls.armor.includes('Leve')
-  if (cat === 'média') return cls.armor.includes('Média')
-  if (cat === 'pesada') return cls.armor.includes('Pesada')
+  if (cat === 'leve') return treino.includes('Leve')
+  if (cat === 'média') return treino.includes('Média')
+  if (cat === 'pesada') return treino.includes('Pesada')
   return false
 }
 
@@ -600,7 +771,11 @@ export interface ProficiencyGroups {
   ferramentas: string[]
 }
 
-/** Proficiências que não são perícias: armadura, armas e ferramentas/instrumentos. */
+/**
+ * Proficiências que não são perícias: armadura, armas e ferramentas/instrumentos.
+ * Cada item ganha a origem entre parênteses quando não vem da própria classe —
+ * é esta lista que a aba de Perícias exibe.
+ */
 export function proficiencyGroups(char: Character): ProficiencyGroups {
   const cls = classById(char.classId)
   const bg = backgroundById(char.backgroundId)
@@ -609,11 +784,21 @@ export function proficiencyGroups(char: Character): ProficiencyGroups {
   const ferramentas: string[] = []
   if (bg?.tool) ferramentas.push(`${bg.tool} (antecedente ${bg.name})`)
 
-  // Opções escolhidas que ampliam as proficiências (Ordem Divina, Ordem Primal, Treinamento Marcial...)
-  for (const { chosen } of characterChoices(char)) {
+  // Só acrescenta o que a classe ainda não dá, sempre creditando a fonte.
+  const juntar = (base: string[], extras: string[] | undefined, fonte: string) => {
+    for (const e of extras ?? []) {
+      if (!base.some((b) => b === e || b.startsWith(`${e} (`))) base.push(`${e} (${fonte})`)
+    }
+  }
+  for (const { group, chosen } of characterChoices(char)) {
     if (!chosen) continue
-    if (chosen.id === 'protetor') { armas.push('Marciais (Ordem Divina)'); armaduras.push('Pesada (Ordem Divina)') }
-    if (chosen.id === 'guardiao') { armas.push('Marciais (Ordem Primal)'); armaduras.push('Média (Ordem Primal)') }
+    juntar(armaduras, chosen.armor, group.name)
+    juntar(armas, chosen.weapons, group.name)
+  }
+  const subclasse = subclassOf(char)
+  if (subclasse) {
+    juntar(armaduras, subclasse.armor, subclasse.name)
+    juntar(armas, subclasse.weapons, subclasse.name)
   }
 
   return {
