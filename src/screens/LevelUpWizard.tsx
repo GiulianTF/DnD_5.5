@@ -2,27 +2,32 @@ import { useMemo, useState } from 'react'
 import type { AbilityKey, AsiChoice, Character, Spell } from '../types'
 import { ABILITIES, ABILITY_NAMES } from '../types'
 import { classById } from '../data/classes'
-import { spellById } from '../data/spells'
 import { GENERAL_FEATS, featById } from '../data/feats'
 import {
   PREPARATION_RULES, abilityMod, alwaysPreparedSpells, availableCantrips, cantripLimit,
-  classSpellCatalog, finalAbilities, knownCantripIds, levelUpSummary, maxSpellLevel, pendingChoices,
-  preparationMode, preparedLimit, preparedSpellIds, spellPickGroups, type ResolvedChoice,
+  classLabel, classLevel, classSpellCatalog, featurePickGroups, finalAbilities, knownCantripIds,
+  levelUpSummary, maxSpellLevel, multiclassOptions, pendingChoices, preparationMode, preparedLimit,
+  preparedSpellIds, spellPickGroups, subclassIdOf, withLevelIn, type ResolvedChoice,
 } from '../engine/rules'
 import { rollHitDie } from '../engine/dice'
 import { useStore } from '../store/store'
-import { Card, Choice, ChoiceAccordion, ChoiceGroup, Segmented, Sheet, SpellText } from '../components/ui'
+import {
+  Card, Choice, ChoiceAccordion, ChoiceGroup, FeaturePickCard, Segmented, Sheet, SpellText,
+} from '../components/ui'
 
 type AsiMode = 'asi2' | 'asi11' | 'feat'
+type HpMode = 'media' | 'rolar'
 
 export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () => void }) {
   const update = useStore((s) => s.updateCharacter)
   const novoNivel = char.level + 1
-  const cls = classById(char.classId)!
 
-  const [hpMode, setHpMode] = useState<'media' | 'rolar'>('media')
-  const [hpRoll, setHpRoll] = useState<number | null>(null)
-  const [subclassId, setSubclassId] = useState<string | undefined>(char.subclassId)
+  /** Classe que vai receber este nível — a inicial, outra que ele já tem, ou uma nova. */
+  const [targetClassId, setTargetClassId] = useState(char.classId)
+  const [hpMode, setHpMode] = useState<HpMode>('media')
+  /** Texto cru do campo de PV: só vira número quando está dentro do intervalo do dado. */
+  const [hpTexto, setHpTexto] = useState('')
+  const [subclassId, setSubclassId] = useState<string | undefined>(undefined)
   const [asiMode, setAsiMode] = useState<AsiMode>('asi2')
   const [asiAbilities, setAsiAbilities] = useState<AbilityKey[]>([])
   const [featId, setFeatId] = useState<string>('')
@@ -32,16 +37,34 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
   const [novasEscolhasClasse, setNovasEscolhasClasse] = useState<Record<string, string>>({})
   /** magias escolhidas nos grupos que não vêm da lista da classe */
   const [picks, setPicks] = useState<Record<string, string[]>>({})
+  /** manobras, invocações, metamagia... escolhidas neste nível */
+  const [featurePicks, setFeaturePicks] = useState<Record<string, string[]>>({})
 
+  const cls = classById(targetClassId)!
   // A subclasse escolhida agora já vale para tudo que vem a seguir: características,
   // escolhas próprias da subclasse (terreno druídico) e magias sempre preparadas.
-  const subclasseAtual = subclassId ?? char.subclassId
+  const subclasseAtual = subclassId ?? subclassIdOf(char, targetClassId)
+  const opcoesDeClasse = useMemo(() => multiclassOptions(char), [char])
+  const jaTemAClasse = classLevel(char, targetClassId) > 0
+
   const resumo = useMemo(
-    () => levelUpSummary({ ...char, subclassId: subclasseAtual }, novoNivel),
-    [char, subclasseAtual, novoNivel],
+    () => levelUpSummary(char, novoNivel, targetClassId, subclasseAtual),
+    [char, novoNivel, targetClassId, subclasseAtual],
   )
 
-  if (!resumo) return null
+  /** Troca de classe alvo zera tudo que dependia da classe anterior. */
+  const escolherClasse = (id: string) => {
+    setTargetClassId(id)
+    setSubclassId(undefined)
+    setNovosTruques([])
+    setNovasMagias([])
+    setNovasEscolhasClasse({})
+    setFeaturePicks({})
+    setAsiMode('asi2')
+    setAsiAbilities([])
+    setFeatId('')
+  }
+
   if (novoNivel > 20) {
     return (
       <Sheet title="Nível máximo" onClose={onClose}>
@@ -49,51 +72,68 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
       </Sheet>
     )
   }
+  if (!resumo) return null
 
   const abs = finalAbilities(char)
-  const draftDepois: Character = { ...char, level: novoNivel, subclassId: subclasseAtual }
-  const modo = preparationMode(draftDepois)
-  const maxLvl = maxSpellLevel(draftDepois)
+  const dado = resumo.hitDie
+  const hpRoll = (() => {
+    const n = Number(hpTexto)
+    return hpTexto.trim() !== '' && Number.isInteger(n) && n >= 1 && n <= dado ? n : null
+  })()
+
+  // Ficha resultante deste nível, já com todas as escolhas feitas aqui.
+  const draftDepois: Character = withLevelIn(char, targetClassId, subclasseAtual)
+  const draft: Character = {
+    ...draftDepois,
+    speciesChoices: { ...(char.speciesChoices ?? {}), ...novasEscolhasEspecie },
+    classChoices: { ...(char.classChoices ?? {}), ...novasEscolhasClasse },
+    spellPicks: { ...(char.spellPicks ?? {}), ...picks },
+    featureChoices: { ...(char.featureChoices ?? {}), ...featurePicks },
+  }
+
+  const modo = preparationMode(draft)
+  const maxLvl = maxSpellLevel(draft)
 
   const truquesAtuais = knownCantripIds(char).length
-  const truquesNovos = Math.max(0, cantripLimit(draftDepois) - truquesAtuais)
+  const truquesNovos = Math.max(0, cantripLimit(draft) - truquesAtuais)
 
-  const limiteDepois = preparedLimit(draftDepois) ?? 0
+  const limiteDepois = preparedLimit(draft) ?? 0
   // O Mago não "prepara mais": ele copia 2 magias novas para o grimório a cada nível.
   const magiasNovas = modo === 'grimorio'
     ? 2
     : Math.max(0, limiteDepois - preparedSpellIds(char).length)
 
-  const disponiveisTruques = availableCantrips(draftDepois).filter((s) => !char.spellsKnown.includes(s.id))
-  const disponiveisMagias = classSpellCatalog(draftDepois).filter((s) => !char.spellsKnown.includes(s.id))
+  const disponiveisTruques = availableCantrips(draft).filter((s) => !char.spellsKnown.includes(s.id))
+  const disponiveisMagias = classSpellCatalog(draft).filter((s) => !char.spellsKnown.includes(s.id))
 
   // Magias que a subclasse passa a manter sempre preparadas neste nível
-  const novasAutomaticas = alwaysPreparedSpells(draftDepois).filter(
-    (m) => !alwaysPreparedSpells({ ...char, subclassId: subclasseAtual }).some((a) => a.spell.id === m.spell.id),
-  )
+  const jaPreparadas = new Set(alwaysPreparedSpells(char).map((a) => a.spell.id))
+  const novasAutomaticas = alwaysPreparedSpells(draft).filter((m) => !jaPreparadas.has(m.spell.id))
 
   // Escolhas de espécie/classe/subclasse desbloqueadas até o novo nível e ainda não feitas
-  const escolhasPendentes = pendingChoices({ ...char, subclassId: subclasseAtual }, novoNivel)
-  // 'subclasse' compartilha o balde de escolhas da classe.
-  const escolhaSelecionada = (source: ResolvedChoice['source'], groupId: string) =>
-    source === 'especie' ? novasEscolhasEspecie[groupId] : novasEscolhasClasse[groupId]
-  const escolhasOk = escolhasPendentes.every((e) => !!escolhaSelecionada(e.source, e.group.id))
+  const escolhasPendentes = pendingChoices(draft, novoNivel)
+  const escolhaSelecionada = (source: ResolvedChoice['source'], key: string) =>
+    source === 'especie' ? novasEscolhasEspecie[key] : novasEscolhasClasse[key]
+  const escolhasOk = escolhasPendentes.every((e) => !!escolhaSelecionada(e.source, e.key))
 
   /*
    * Magias que não vêm da lista da classe (linhagem élfica, talentos como Tocado
    * pelo Feérico...) são escolhidas aqui, junto das magias novas da classe.
    */
-  const draftComEscolhas: Character = {
-    ...draftDepois,
-    speciesChoices: { ...(char.speciesChoices ?? {}), ...novasEscolhasEspecie },
-    classChoices: { ...(char.classChoices ?? {}), ...novasEscolhasClasse },
-    spellPicks: { ...(char.spellPicks ?? {}), ...picks },
-  }
-  const gruposDeMagia = spellPickGroups(draftComEscolhas, {
+  const gruposDeMagia = spellPickGroups(draft, {
     uptoLevel: novoNivel,
     extraFeatIds: asiMode === 'feat' && featId ? [featId] : [],
   })
   const gruposOk = gruposDeMagia.every((g) => !g.pending)
+
+  /*
+   * Manobras do Mestre de Batalha, Invocações Místicas do Bruxo, Metamagia...
+   * Aparecem assim que a subclasse é escolhida aqui em cima, sem precisar
+   * fechar o assistente e voltar depois.
+   */
+  const gruposDeFeature = featurePickGroups(draft)
+    .filter((g) => g.pending || featurePicks[g.pick.id] !== undefined)
+  const featuresOk = gruposDeFeature.every((g) => !g.pending)
 
   const togglePick = (grupoId: string, spellId: string, limite: number) => {
     setPicks((atual) => {
@@ -104,15 +144,26 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
     })
   }
 
+  const toggleFeature = (grupoId: string, optionId: string, limite: number) => {
+    setFeaturePicks((atual) => {
+      const lista = atual[grupoId] ?? char.featureChoices?.[grupoId] ?? []
+      if (lista.includes(optionId)) return { ...atual, [grupoId]: lista.filter((x) => x !== optionId) }
+      if (lista.length >= limite) return atual
+      return { ...atual, [grupoId]: [...lista, optionId] }
+    })
+  }
+
   const precisaSubclasse = resumo.needsSubclass && !subclassId
   const asiOk = !resumo.needsAsi || (
     asiMode === 'feat' ? !!featId
       : asiMode === 'asi2' ? asiAbilities.length === 1
         : asiAbilities.length === 2
   )
+  const hpOk = hpMode === 'media' || hpRoll !== null
   const truquesOk = novosTruques.length === truquesNovos
   const magiasOk = novasMagias.length === magiasNovas
-  const podeConfirmar = !precisaSubclasse && asiOk && truquesOk && magiasOk && escolhasOk && gruposOk
+  const podeConfirmar = hpOk && !precisaSubclasse && asiOk && truquesOk && magiasOk
+    && escolhasOk && gruposOk && featuresOk
 
   const toggleAbility = (k: AbilityKey, limite: number) => {
     if (asiAbilities.includes(k)) setAsiAbilities(asiAbilities.filter((x) => x !== k))
@@ -147,12 +198,15 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
 
     update(char.id, {
       level: novoNivel,
-      subclassId: subclasseAtual,
+      classes: draftDepois.classes,
+      levelClasses: draftDepois.levelClasses,
+      subclassId: draftDepois.subclassId,
       asiChoices,
       hpRolls,
-      speciesChoices: { ...(char.speciesChoices ?? {}), ...novasEscolhasEspecie },
-      classChoices: { ...(char.classChoices ?? {}), ...novasEscolhasClasse },
-      spellPicks: { ...(char.spellPicks ?? {}), ...picks },
+      speciesChoices: draft.speciesChoices,
+      classChoices: draft.classChoices,
+      spellPicks: draft.spellPicks,
+      featureChoices: draft.featureChoices,
       spellsKnown: [...char.spellsKnown, ...novosTruques, ...novasMagias],
       // No grimório as magias novas entram no livro; a preparação é refeita no descanso longo.
       spellsPrepared: modo === 'grimorio'
@@ -169,33 +223,107 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
   return (
     <Sheet title={`⬆ Subir para o Nível ${novoNivel}`} onClose={onClose}>
       <div className="banner">
-        <strong className="gold">{cls.name} nível {novoNivel}</strong>
+        <strong className="gold">{cls.name} nível {resumo.classLevel}</strong>
+        <div className="tiny">Nível de personagem {novoNivel} · {classLabel(draft)}</div>
         {resumo.proficiencyChanged && <div>Seu bônus de proficiência sobe para +{resumo.proficiencyBonus}!</div>}
       </div>
+
+      {/* --- Em qual classe cai este nível (multiclasse) --- */}
+      <Card title="Classe deste nível">
+        <p className="muted tiny" style={{ marginBottom: 10 }}>
+          Suba na mesma classe ou comece uma nova. Na multiclasse o nível de personagem é a soma
+          de todos os níveis — o bônus de proficiência, os PV e os espaços de magia já saem
+          calculados pelas regras do PHB 2024.
+        </p>
+        <ChoiceAccordion>
+          {opcoesDeClasse.filter((o) => o.jaTem).map(({ cls: c }) => (
+            <Choice
+              key={c.id}
+              id={`classe-${c.id}`}
+              selected={targetClassId === c.id}
+              title={`${c.name} — nível ${classLevel(char, c.id)} → ${classLevel(char, c.id) + 1}`}
+              desc={`Dado de Vida d${c.hitDie}`}
+              onClick={() => escolherClasse(c.id)}
+            />
+          ))}
+        </ChoiceAccordion>
+
+        <details style={{ marginTop: 10 }}>
+          <summary className="muted">Começar uma classe nova (multiclasse)</summary>
+          <div style={{ marginTop: 8 }}>
+            <ChoiceAccordion>
+              {opcoesDeClasse.filter((o) => !o.jaTem).map(({ cls: c, faltando }) => (
+                <Choice
+                  key={c.id}
+                  id={`classe-nova-${c.id}`}
+                  selected={targetClassId === c.id}
+                  disabled={faltando.length > 0}
+                  title={`${c.name} — nível 1`}
+                  desc={faltando.length > 0
+                    ? `Requer 13+ em ${faltando.map((k) => ABILITY_NAMES[k]).join(' ou ')}`
+                    : `Dado de Vida d${c.hitDie} · ${c.primary}`}
+                  details={
+                    <>
+                      <p><strong className="gold">Armaduras por multiclasse:</strong>{' '}
+                        {(c.multiclassArmor ?? c.armor).join(', ') || 'nenhuma'}</p>
+                      <p><strong className="gold">Armas por multiclasse:</strong>{' '}
+                        {(c.multiclassWeapons ?? c.weapons).join(', ') || 'nenhuma'}</p>
+                      <p className="muted tiny">
+                        Entrar numa classe nova não concede as perícias, as salvaguardas nem o
+                        equipamento inicial dela — só as proficiências reduzidas acima.
+                      </p>
+                    </>
+                  }
+                  onClick={() => { if (faltando.length === 0) escolherClasse(c.id) }}
+                />
+              ))}
+            </ChoiceAccordion>
+          </div>
+        </details>
+
+        {!jaTemAClasse && (
+          <div className="banner">
+            Primeiro nível de <strong className="gold">{cls.name}</strong>. Você passa a ser{' '}
+            {classLabel(draft)}.
+          </div>
+        )}
+      </Card>
 
       {/* --- Pontos de Vida --- */}
       <Card title="Pontos de Vida">
         <p className="muted tiny" style={{ marginBottom: 10 }}>
-          Dado de Vida: d{resumo.hitDie}. Use a média fixa ({resumo.hitDie / 2 + 1}) ou role o dado.
+          Dado de Vida de {cls.name}: d{dado}. Use a média fixa ({dado / 2 + 1}) ou informe o
+          resultado do dado — role aqui ou digite o valor que você rolou na mesa.
         </p>
         <Segmented
           value={hpMode}
-          onChange={(m) => { setHpMode(m); if (m === 'media') setHpRoll(null) }}
+          onChange={(m) => { setHpMode(m); setHpTexto('') }}
           options={[
-            { value: 'media', label: `Média (${resumo.hitDie / 2 + 1})` },
-            { value: 'rolar', label: 'Rolar o dado' },
+            { value: 'media', label: `Média (${dado / 2 + 1})` },
+            { value: 'rolar', label: 'Rolar / digitar' },
           ]}
         />
         {hpMode === 'rolar' && (
           <div style={{ marginTop: 10 }}>
-            <button className="gold" style={{ width: '100%' }} onClick={() => setHpRoll(rollHitDie(resumo.hitDie))}>
-              🎲 Rolar 1d{resumo.hitDie}
+            <button className="gold" style={{ width: '100%' }} onClick={() => setHpTexto(String(rollHitDie(dado)))}>
+              🎲 Rolar 1d{dado}
             </button>
-            {hpRoll !== null && (
+            <label style={{ marginTop: 10 }}>Valor do dado (1 a {dado})</label>
+            <input
+              type="number" inputMode="numeric" min={1} max={dado} placeholder={`Digite de 1 a ${dado}`}
+              value={hpTexto}
+              onChange={(e) => setHpTexto(e.target.value)}
+            />
+            {hpRoll !== null ? (
               <div className="center" style={{ marginTop: 8 }}>
-                Resultado: <strong className="gold" style={{ fontSize: '1.3rem' }}>{hpRoll}</strong>
-                <span className="muted"> + {abilityMod(abs.con)} de Constituição</span>
+                PV ganhos: <strong className="gold" style={{ fontSize: '1.3rem' }}>
+                  {Math.max(1, hpRoll + abilityMod(abs.con))}
+                </strong>
+                <span className="muted"> ({hpRoll} do dado {abilityMod(abs.con) >= 0 ? '+' : '−'}{' '}
+                  {Math.abs(abilityMod(abs.con))} de Constituição)</span>
               </div>
+            ) : (
+              <div className="banner warn">Informe um valor entre 1 e {dado}.</div>
             )}
           </div>
         )}
@@ -215,7 +343,7 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
 
       {/* --- Subclasse --- */}
       {resumo.needsSubclass && (
-        <Card title="Escolha sua Subclasse">
+        <Card title={`Escolha sua Subclasse de ${cls.name}`}>
           <p className="muted tiny" style={{ marginBottom: 10 }}>
             Esta escolha é permanente e concede características agora e em níveis futuros.
           </p>
@@ -242,15 +370,24 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
       )}
 
       {/* --- Escolhas de espécie e de classe (Estilo de Luta, Revelação Celestial...) --- */}
-      {escolhasPendentes.map(({ source, group }) => (
+      {escolhasPendentes.map(({ source, group, key, className }) => (
         <ChoiceGroup
-          key={`${source}-${group.id}`}
-          group={group}
-          value={escolhaSelecionada(source, group.id)}
+          key={key}
+          group={className ? { ...group, name: `${group.name} · ${className}` } : group}
+          value={escolhaSelecionada(source, key)}
           onChange={(optionId) => {
-            if (source === 'especie') setNovasEscolhasEspecie((p) => ({ ...p, [group.id]: optionId }))
-            else setNovasEscolhasClasse((p) => ({ ...p, [group.id]: optionId }))
+            if (source === 'especie') setNovasEscolhasEspecie((p) => ({ ...p, [key]: optionId }))
+            else setNovasEscolhasClasse((p) => ({ ...p, [key]: optionId }))
           }}
+        />
+      ))}
+
+      {/* --- Manobras, Invocações Místicas, Metamagia... --- */}
+      {gruposDeFeature.map((g) => (
+        <FeaturePickCard
+          key={g.pick.id}
+          grupo={g}
+          onToggle={(optionId) => toggleFeature(g.pick.id, optionId, g.count)}
         />
       ))}
 
@@ -421,8 +558,10 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
       </button>
       {!podeConfirmar && (
         <div className="muted tiny center" style={{ marginTop: 8 }}>
+          {!hpOk && 'Informe o valor do Dado de Vida. '}
           {precisaSubclasse && 'Escolha uma subclasse. '}
-          {!escolhasOk && `Faça as escolhas pendentes: ${escolhasPendentes.filter((e) => !escolhaSelecionada(e.source, e.group.id)).map((e) => e.group.name).join(', ')}. `}
+          {!escolhasOk && `Faça as escolhas pendentes: ${escolhasPendentes.filter((e) => !escolhaSelecionada(e.source, e.key)).map((e) => e.group.name).join(', ')}. `}
+          {!featuresOk && `Complete: ${gruposDeFeature.filter((g) => g.pending).map((g) => g.pick.name).join(', ')}. `}
           {!asiOk && 'Complete o incremento de atributo ou talento. '}
           {!truquesOk && `Escolha ${truquesNovos} truque(s). `}
           {!magiasOk && `Escolha ${magiasNovas} magia(s).`}

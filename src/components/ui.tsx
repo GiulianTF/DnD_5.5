@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { OptionGroup } from '../types'
+import { featureOptionBlocked, type ResolvedFeaturePick } from '../engine/rules'
 
 /**
  * Escopo de acordeão: dentro dele apenas uma escolha fica expandida por vez —
@@ -157,6 +158,59 @@ export function ChoiceGroup({ group, value, onChange, aviso = true }: {
         ))}
       </ChoiceAccordion>
       {aviso && !value && <div className="banner warn">Escolha uma opção para continuar.</div>}
+    </Card>
+  )
+}
+
+/**
+ * Cartão de característica com várias opções (Manobras, Invocações Místicas,
+ * Metamagia...). Grupos com `count > 0` são de escolha; os demais só listam o
+ * que a característica concede.
+ */
+export function FeaturePickCard({ grupo, onToggle, aviso = true }: {
+  grupo: ResolvedFeaturePick
+  onToggle: (optionId: string) => void
+  aviso?: boolean
+}) {
+  const { pick, count, options, chosen, die, subclassName, className } = grupo
+  const escolhavel = count > 0
+  const titulo = escolhavel ? `${pick.name} (${chosen.length}/${count})` : pick.name
+
+  return (
+    <Card title={titulo}>
+      <p className="muted tiny" style={{ marginBottom: 10 }}>
+        <strong className="gold">{subclassName ?? className}</strong>
+        {die && <> · Dado: <strong className="gold">{die}</strong></>}
+        {pick.desc && <> — {pick.desc}</>}
+        {pick.nota && <> {pick.nota}</>}
+      </p>
+      <ChoiceAccordion>
+        {options.map((o) => {
+          const marcada = chosen.includes(o.id)
+          const bloqueada = escolhavel && !marcada && (
+            featureOptionBlocked(o, chosen) || chosen.length >= count
+          )
+          return (
+            <Choice
+              key={o.id}
+              id={`${pick.id}-${o.id}`}
+              selected={escolhavel ? marcada : true}
+              disabled={bloqueada}
+              title={o.name}
+              desc={[
+                o.cost !== undefined && o.cost !== 1 ? (o.cost === 0 ? 'sem custo' : `custo ${o.cost}`) : null,
+                o.level && o.level > 1 ? `nível ${o.level}` : null,
+                o.requires ? `exige ${options.find((x) => x.id === o.requires)?.name ?? o.requires}` : null,
+              ].filter(Boolean).join(' · ') || undefined}
+              details={<p>{o.desc}</p>}
+              onClick={() => { if (escolhavel && !bloqueada) onToggle(o.id) }}
+            />
+          )
+        })}
+      </ChoiceAccordion>
+      {aviso && escolhavel && chosen.length < count && (
+        <div className="banner warn">Escolha {count - chosen.length} opção(ões) para continuar.</div>
+      )}
     </Card>
   )
 }

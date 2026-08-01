@@ -196,8 +196,11 @@ export type CasterType = 'nenhum' | 'completo' | 'meio' | 'pacto'
 export interface ClassResource {
   id: string
   name: string
-  /** máximo de usos em função do nível e modificadores */
-  max: (level: number, mods: AbilityScores) => number
+  /**
+   * Máximo de usos. `level` é o nível NESTA classe; `charLevel` é o nível total
+   * do personagem (usado por recursos que dependem do bônus de proficiência).
+   */
+  max: (level: number, mods: AbilityScores, charLevel: number) => number
   recharge: 'curto' | 'longo'
   /**
    * Recursos com recarga em descanso longo que ainda assim devolvem alguns usos
@@ -212,6 +215,47 @@ export interface ClassFeature {
   level: number
   name: string
   desc: string
+}
+
+// ---------- Características com várias opções (manobras, invocações, metamagia) ----------
+/**
+ * Uma opção dentro de uma característica de múltipla escolha. Pode custar usos
+ * de um recurso limitado (metamagia gasta Pontos de Feitiçaria, manobras gastam
+ * Dados de Superioridade) — é isso que a aba de Ações desconta.
+ */
+export interface FeatureOption {
+  id: string
+  name: string
+  desc: string
+  /** nível DA CLASSE a partir do qual a opção pode ser escolhida/usada */
+  level?: number
+  /** usos do recurso associado que a opção consome (padrão 1) */
+  cost?: number
+  /** id de outra opção do mesmo grupo exigida como pré-requisito */
+  requires?: string
+}
+
+/**
+ * Um grupo de opções de uma característica de classe ou de subclasse:
+ * Manobras do Mestre de Batalha, Invocações Místicas do Bruxo, Metamagia do
+ * Feiticeiro, opções de Canalizar Divindade...
+ */
+export interface FeaturePick {
+  id: string
+  name: string
+  desc?: string
+  /**
+   * Quantas opções escolher, por nível DA CLASSE (índice 0 = nível 1).
+   * Ausente = todas as opções liberadas pelo nível são concedidas de graça.
+   */
+  countByLevel?: number[]
+  options: FeatureOption[]
+  /** recurso consumido pelas opções (id de ClassResource) */
+  resourceId?: string
+  /** dado associado, por nível de classe (Dados de Superioridade: d8 → d10 → d12) */
+  dieByLevel?: string[]
+  /** observação exibida junto do grupo */
+  nota?: string
 }
 
 /**
@@ -247,6 +291,10 @@ export interface Subclass {
   weapons?: string[]
   /** conjuração de 1/3 concedida pela subclasse */
   spellcasting?: SubclassSpellcasting
+  /** características de múltipla escolha próprias da subclasse (Manobras) */
+  featurePicks?: FeaturePick[]
+  /** recursos limitados próprios da subclasse (Dados de Superioridade) */
+  resources?: ClassResource[]
 }
 
 /**
@@ -289,8 +337,22 @@ export interface DndClass {
   equipmentOptions: EquipmentOption[]
   /** escolhas de características (Estilo de Luta, Ordem Divina, ...) */
   choices?: OptionGroup[]
+  /** características de múltipla escolha (Invocações Místicas, Metamagia) */
+  featurePicks?: FeaturePick[]
   /** magias que a própria classe deixa escolher (Arcanum Místico do Bruxo) */
   spellPicks?: SpellPick[]
+  /**
+   * Requisito de habilidade para entrar nesta classe por multiclasse
+   * (PHB 2024: valor 13 ou mais). `all` exige todas; `any` exige uma delas.
+   */
+  multiclassReq?: { all?: AbilityKey[]; any?: AbilityKey[] }
+  /**
+   * Treinamento com armadura concedido quando a classe é adquirida por
+   * multiclasse — bem menor do que o da classe inicial (PHB 2024).
+   */
+  multiclassArmor?: string[]
+  /** proficiências com armas concedidas por multiclasse */
+  multiclassWeapons?: string[]
   /**
    * Quantas armas o personagem escolhe para a característica Maestria em Armas
    * (Guerreiro: 3 no 1º nível; Bárbaro, Paladino, Patrulheiro e Ladino: 2).
@@ -444,6 +506,14 @@ export interface AsiChoice {
   featId?: string
 }
 
+// ---------- Multiclasse ----------
+/** Uma classe do personagem e quantos níveis ele tem nela. */
+export interface ClassEntry {
+  classId: string
+  subclassId?: string
+  level: number
+}
+
 export interface Character {
   id: string
   name: string
@@ -451,9 +521,21 @@ export interface Character {
   backgroundId: string
   /** distribuição dos bônus do antecedente, ex.: { for: 2, con: 1 } */
   backgroundBonuses: Partial<Record<AbilityKey, number>>
+  /** classe inicial (a que define salvaguardas e equipamento) */
   classId: string
   subclassId?: string
+  /** nível TOTAL do personagem (soma dos níveis de todas as classes) */
   level: number
+  /**
+   * Todas as classes do personagem, a inicial primeiro. Fichas de uma classe só
+   * podem omitir o campo — nesse caso ele é derivado de `classId`/`level`.
+   */
+  classes?: ClassEntry[]
+  /**
+   * Classe ganha em cada nível de personagem (índice 0 = nível 1). É o que
+   * permite saber qual Dado de Vida cada nível usou numa ficha multiclasse.
+   */
+  levelClasses?: string[]
   abilityMethod: AbilityMethod
   baseAbilities: AbilityScores
   skillProfs: string[]
@@ -462,6 +544,11 @@ export interface Character {
   speciesChoices: Record<string, string>
   /** opção escolhida em cada grupo de escolha da classe: { 'estilo-de-luta': 'defesa' } */
   classChoices: Record<string, string>
+  /**
+   * Opções marcadas em cada característica de múltipla escolha:
+   * { 'manobras': ['ataque-preciso', 'rasteira'], 'invocacoes-misticas': [...] }.
+   */
+  featureChoices: Record<string, string[]>
   /** talentos de Origem adicionais (ex.: traço Versátil do Humano) */
   originFeats: string[]
   /** armas escolhidas para a característica Maestria em Armas (ids de Item) */
