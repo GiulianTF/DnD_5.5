@@ -5,14 +5,16 @@ import { newCharacter, normalizeCharacter } from './store/store'
 import {
   armorClass, attackActions, characterFeats, maxHp, spellSlots, pactSlots, preparedLimit, cantripLimit,
   characterResources, innateSpells, levelUpSummary, finalAbilities, pendingChoices, saves, skillValues,
-  speciesLabel, spellcasting, spellPickGroups,
+  speciesLabel, spellcasting, spellPickGroups, alwaysPreparedSpells, isProficientWithArmor, maxSpellLevel,
+  isProficientWithWeapon, preparableSpells, preparationMode, preparedSpellIds, proficiencyGroups,
+  spellListClasses,
 } from './engine/rules'
 import { pagar, parseCost, purseInCopper } from './engine/money'
-import { CLASSES } from './data/classes'
+import { CLASSES, classById } from './data/classes'
 import { SPECIES } from './data/species'
 import { SPELLS, spellById } from './data/spells'
 import { BACKGROUNDS } from './data/backgrounds'
-import { ALL_ITEMS, MAGIC_ITEMS, itemById } from './data/equipment'
+import { ALL_ITEMS, ARMORS, MAGIC_ITEMS, itemById } from './data/equipment'
 import { FEATS, featById } from './data/feats'
 import { skillById } from './data/skills'
 
@@ -336,6 +338,159 @@ const depois2 = pagar(bolsa2, 5)!
 ok(!!depois2 && depois2.pp === 9 && depois2.pc === 5, `quebrar 1 PO para pagar 5 PC devolve troco (${depois2.pp} PP, ${depois2.pc} PC)`)
 ok(pagar({ pc: 3, pp: 0, pe: 0, po: 0, pl: 0 }, 100) === null, 'sem dinheiro suficiente, pagar retorna null')
 ok(purseInCopper({ pc: 1, pp: 1, pe: 1, po: 1, pl: 1 }) === 1161, 'valor total da bolsa em cobre')
+
+console.log('\n== Proficiencias concedidas por escolhas e subclasses ==')
+const cotaDeMalha = itemById('cota-de-malha')!
+const clerigoProtetor: Character = newCharacter({
+  classId: 'clerigo', level: 1, classChoices: { 'ordem-divina': 'protetor' },
+})
+const clerigoTaumaturgo: Character = { ...clerigoProtetor, classChoices: { 'ordem-divina': 'taumaturgo' } }
+ok(isProficientWithArmor(clerigoProtetor, cotaDeMalha),
+  'Clerigo Protetor e proficiente com armadura pesada (cota de malha)')
+ok(!isProficientWithArmor(clerigoTaumaturgo, cotaDeMalha),
+  'Clerigo Taumaturgo NAO e proficiente com armadura pesada')
+ok(isProficientWithWeapon(clerigoProtetor, itemById('espada-longa')!),
+  'Clerigo Protetor e proficiente com armas marciais')
+ok(!isProficientWithWeapon(clerigoTaumaturgo, itemById('espada-longa')!),
+  'Clerigo Taumaturgo NAO e proficiente com armas marciais')
+ok(proficiencyGroups(clerigoProtetor).armaduras.some((a) => a.startsWith('Pesada')),
+  'a aba de Pericias lista a armadura pesada da Ordem Divina')
+// A lista da aba de Pericias e o calculo de proficiencia nao podem divergir
+for (const cat of ['leve', 'média', 'pesada'] as const) {
+  const rotulo = cat === 'leve' ? 'Leve' : cat === 'média' ? 'Média' : 'Pesada'
+  const armadura = ARMORS.find((a) => a.armor?.category === cat)!
+  ok(isProficientWithArmor(clerigoProtetor, armadura)
+    === proficiencyGroups(clerigoProtetor).armaduras.some((a) => a === rotulo || a.startsWith(`${rotulo} (`)),
+    `armadura ${rotulo}: aviso de proficiencia e lista da ficha concordam`)
+}
+// Ladino continua limitado a marciais com Leve ou Acuidade
+const ladino: Character = newCharacter({ classId: 'ladino', level: 1 })
+ok(isProficientWithWeapon(ladino, itemById('espada-curta')!), 'Ladino usa espada curta (Leve/Acuidade)')
+ok(!isProficientWithWeapon(ladino, itemById('espada-grande')!), 'Ladino nao usa espada grande')
+// Colegio da Bravura concede armadura media e escudos no nivel 3
+const bardoBravura: Character = newCharacter({
+  classId: 'bardo', level: 3, subclassId: 'bravura', hpRolls: [null, null],
+})
+ok(isProficientWithArmor(bardoBravura, itemById('brunea')! ?? ARMORS.find((a) => a.armor?.category === 'média')!),
+  'Bardo do Colegio da Bravura usa armadura media')
+
+console.log('\n== Magias sempre preparadas de subclasse ==')
+// Toda magia declarada nas subclasses precisa existir no catalogo
+for (const c of CLASSES) {
+  for (const s of c.subclasses) {
+    for (const m of s.alwaysPrepared ?? []) {
+      ok(!!spellById(m.spellId), `${c.name}/${s.name}: magia "${m.spellId}" existe no catalogo`)
+    }
+    for (const g of s.choices ?? []) {
+      for (const o of g.options) {
+        for (const m of o.alwaysPrepared ?? []) {
+          ok(!!spellById(m.spellId), `${c.name}/${s.name}/${o.name}: magia "${m.spellId}" existe`)
+        }
+      }
+    }
+  }
+}
+const clerigoVida: Character = newCharacter({
+  classId: 'clerigo', level: 5, subclassId: 'vida', hpRolls: [null, null, null, null],
+  classChoices: { 'ordem-divina': 'protetor' },
+})
+const dominioVida = alwaysPreparedSpells(clerigoVida).map((m) => m.spell.id)
+ok(dominioVida.includes('bencao') && dominioVida.includes('curar-ferimentos'),
+  'Dominio da Vida deixa Bencao e Curar Ferimentos sempre preparadas')
+ok(dominioVida.includes('revivificar'), 'no nivel 5 o dominio acrescenta Revivificar')
+ok(!dominioVida.includes('aura-de-vida'), 'as magias de nivel 7 ainda nao aparecem no nivel 5')
+ok(preparedSpellIds({ ...clerigoVida, spellsPrepared: ['bencao', 'orientacao', 'comando'] }).length === 1,
+  'magias de dominio e truques nao ocupam vaga no limite de preparadas')
+// Bruxo: as magias do patrono tambem precisam aparecer
+const bruxoInfernal: Character = newCharacter({
+  classId: 'bruxo', level: 3, subclassId: 'infernal', hpRolls: [null, null],
+})
+const patrono = alwaysPreparedSpells(bruxoInfernal).map((m) => m.spell.id)
+ok(patrono.includes('maos-flamejantes') && patrono.includes('sugestao'),
+  'Patrono Infero deixa Maos Flamejantes e Sugestao sempre preparadas')
+// Druida da Terra: o terreno escolhido define as magias
+const druidaTerra: Character = newCharacter({
+  classId: 'druida', level: 3, subclassId: 'terra', hpRolls: [null, null],
+  classChoices: { 'ordem-primal': 'guardiao', 'terreno-druidico': 'polar' },
+})
+const terrenoPolar = alwaysPreparedSpells(druidaTerra).map((m) => m.spell.id)
+ok(terrenoPolar.includes('raio-de-gelo') && terrenoPolar.includes('paralisar-pessoa'),
+  'Circulo da Terra (Polar) prepara Raio de Gelo e Paralisar Pessoa')
+ok(pendingChoices(newCharacter({ classId: 'druida', level: 3, subclassId: 'terra', hpRolls: [null, null] }))
+  .some((c) => c.group.id === 'terreno-druidico'),
+  'o terreno druidico aparece como escolha pendente ate ser feito')
+
+console.log('\n== Formas de preparar magias (PHB 2024) ==')
+const MODOS: Record<string, string> = {
+  bardo: 'nivel-uma', bruxo: 'nivel-uma', feiticeiro: 'nivel-uma',
+  clerigo: 'descanso-todas', druida: 'descanso-todas',
+  paladino: 'descanso-uma', patrulheiro: 'descanso-uma',
+  mago: 'grimorio',
+}
+for (const [classId, esperado] of Object.entries(MODOS)) {
+  ok(preparationMode(newCharacter({ classId, level: 1 })) === esperado,
+    `${classById(classId)!.name}: ${esperado}`)
+}
+ok(preparationMode(newCharacter({ classId: 'barbaro', level: 1 })) === null, 'Barbaro nao prepara magias')
+// Clerigo escolhe entre TODA a lista da classe; o Mago so entre as do grimorio
+const clerigoNv1 = newCharacter({ classId: 'clerigo', level: 1 })
+ok(preparableSpells(clerigoNv1).length === SPELLS.filter((s) => s.classes.includes('clerigo') && s.level === 1).length,
+  `Clerigo prepara entre todas as ${preparableSpells(clerigoNv1).length} magias de 1o circulo da classe`)
+const magoComLivro: Character = newCharacter({
+  classId: 'mago', level: 1, spellsKnown: ['misseis-magicos', 'escudo-arcano'],
+})
+ok(preparableSpells(magoComLivro).every((s) => magoComLivro.spellsKnown.includes(s.id)),
+  'Mago so prepara magias que estao no grimorio')
+// Bardo nivel 10 (Segredos Magicos) passa a alcancar outras listas
+const bardo10: Character = newCharacter({ classId: 'bardo', level: 10, hpRolls: Array(9).fill(null) })
+ok(spellListClasses(bardo10).includes('mago'), 'Bardo nivel 10 pode preparar magias de Mago (Segredos Magicos)')
+ok(!spellListClasses({ ...bardo10, level: 9 }).includes('mago'), 'antes do nivel 10, so a lista de Bardo')
+// Arcanum Mistico: o Bruxo escolhe uma magia de 6o a 9o circulo nos niveis 11, 13, 15 e 17
+const bruxo11: Character = newCharacter({ classId: 'bruxo', level: 11, hpRolls: Array(10).fill(null) })
+const arcanum = spellPickGroups(bruxo11).filter((g) => g.pick.id.startsWith('arcanum-mistico'))
+ok(arcanum.length === 1 && arcanum[0].pick.spellLevel === 6,
+  `no nivel 11 abre so o Arcanum Mistico de 6o circulo (${arcanum.length} grupo)`)
+ok(arcanum[0].options.length > 0 && arcanum[0].options.every((s) => s.level === 6 && s.classes.includes('bruxo')),
+  `oferece ${arcanum[0].options.length} magias de Bruxo de 6o circulo`)
+ok(spellPickGroups(newCharacter({ classId: 'bruxo', level: 17, hpRolls: Array(16).fill(null) }))
+  .filter((g) => g.pick.id.startsWith('arcanum-mistico')).length === 4,
+  'no nivel 17 os quatro Arcanums estao disponiveis')
+// Segredos Magicos do Colegio do Conhecimento: qualquer circulo acessivel, sempre preparadas
+const bardoLore: Character = newCharacter({
+  classId: 'bardo', level: 6, subclassId: 'conhecimento', hpRolls: Array(5).fill(null),
+})
+const segredos = spellPickGroups(bardoLore).find((g) => g.pick.id === 'conhecimento-segredos-magicos')
+ok(!!segredos && segredos.options.some((s) => s.classes.includes('mago')),
+  'Segredos Magicos alcanca a lista de Mago')
+ok(!!segredos && segredos.options.every((s) => s.level <= maxSpellLevel(bardoLore)),
+  'Segredos Magicos so oferece circulos para os quais o Bardo tem espacos')
+const bardoComSegredos: Character = {
+  ...bardoLore, spellPicks: { 'conhecimento-segredos-magicos': ['bola-de-fogo', 'curar-ferimentos'] },
+}
+ok(alwaysPreparedSpells(bardoComSegredos).some((m) => m.spell.id === 'bola-de-fogo'),
+  'as magias dos Segredos Magicos ficam sempre preparadas')
+ok(!innateSpells(bardoComSegredos).some((m) => m.spell.id === 'bola-de-fogo'),
+  'e nao entram como magias inatas com usos gratis')
+
+console.log('\n== Subclasses conjuradoras (1/3 de conjurador) ==')
+const cavaleiro: Character = newCharacter({
+  classId: 'guerreiro', level: 3, subclassId: 'cavaleiro-arcano', hpRolls: [null, null],
+})
+const scCavaleiro = spellcasting(cavaleiro)
+ok(!!scCavaleiro && scCavaleiro.ability === 'int', 'Cavaleiro Mistico conjura com Inteligencia')
+ok(spellSlots(cavaleiro)[0] === 2, `2 espacos de 1o circulo no nivel 3 (${spellSlots(cavaleiro)[0]})`)
+ok(preparedLimit(cavaleiro) === 3, `3 magias preparadas no nivel 3 (${preparedLimit(cavaleiro)})`)
+ok(cantripLimit(cavaleiro) === 2, `2 truques no nivel 3 (${cantripLimit(cavaleiro)})`)
+ok(preparableSpells(cavaleiro).every((s) => s.classes.includes('mago')), 'so magias da lista de Mago')
+ok(preparationMode(cavaleiro) === 'nivel-uma', 'Cavaleiro Mistico troca uma magia por nivel')
+ok(spellcasting(newCharacter({ classId: 'guerreiro', level: 2 })) === null,
+  'Guerreiro sem subclasse conjuradora nao tem conjuracao')
+const trapaceiro: Character = newCharacter({
+  classId: 'ladino', level: 3, subclassId: 'trapaceiro-arcano', hpRolls: [null, null],
+})
+ok(alwaysPreparedSpells(trapaceiro).some((m) => m.spell.id === 'maos-magicas'),
+  'Trapaceiro Arcano sempre tem Maos Magicas')
+ok(cantripLimit(trapaceiro) + 1 === 3, 'Trapaceiro Arcano: 2 truques a escolher + Maos Magicas = 3')
 
 console.log('\n== Fichas antigas (sem os campos novos) ==')
 const antiga = JSON.parse(JSON.stringify(newCharacter({ classId: 'guerreiro' }))) as Character

@@ -1,7 +1,17 @@
-import type { DndClass, ClassFeature, EquipmentGrant, EquipmentOption, OptionGroup, Subclass } from '../types'
+import type {
+  AbilityKey, AlwaysPreparedSpell, ClassFeature, DndClass, EquipmentGrant, EquipmentOption,
+  OptionGroup, Subclass,
+} from '../types'
 import { FIGHTING_STYLES } from './feats'
 
 const mod = (v: number) => Math.floor((v - 10) / 2)
+
+/**
+ * Converte a tabela de magias sempre preparadas do livro ("Nível de Clérigo /
+ * Magias Preparadas") na lista achatada usada pela ficha.
+ */
+const semprePreparadas = (tabela: Record<number, string[]>): AlwaysPreparedSpell[] =>
+  Object.entries(tabela).flatMap(([level, ids]) => ids.map((spellId) => ({ level: Number(level), spellId })))
 
 // ---------- Equipamento inicial (PHB 2024: pacote da classe ou só moedas) ----------
 const eq = (label: string, items: EquipmentGrant[], gold: number, id = 'A'): EquipmentOption =>
@@ -54,12 +64,25 @@ const epicBoon = (): ClassFeature => ({
   desc: 'Ganhe uma Dádiva Épica (talento épico) ou outro talento à sua escolha; uma habilidade pode chegar a 30.',
 })
 
-const sub = (id: string, name: string, desc: string, f: [number, string, string][]): Subclass => ({
+const sub = (
+  id: string, name: string, desc: string, f: [number, string, string][],
+  extra: Omit<Subclass, 'id' | 'name' | 'desc' | 'features'> = {},
+): Subclass => ({
   id,
   name,
   desc,
   features: f.map(([level, n, d]) => ({ level, name: n, desc: d })),
+  ...extra,
 })
+
+// ---------- Conjuração de 1/3 (Cavaleiro Místico e Trapaceiro Arcano) ----------
+const PREP_TERCO = [0, 0, 3, 4, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 11, 11, 12, 13]
+/**
+ * Truques à escolha: 2 no nível 3, 3 no nível 10. O Trapaceiro Arcano usa a
+ * mesma contagem porque o terceiro truque dele (Mãos Mágicas) é fixo e entra
+ * como magia sempre preparada.
+ */
+const CANTRIPS_TERCO = [0, 0, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
 
 export const CLASSES: DndClass[] = [
   // ================= BÁRBARO =================
@@ -156,6 +179,7 @@ export const CLASSES: DndClass[] = [
     caster: 'completo',
     spellAbility: 'car',
     preparedByLevel: PREP_FULL,
+    preparation: 'nivel-uma',
     cantripsByLevel: CANTRIPS_2_3_4,
     startingEquipment: 'Armadura de couro, 2 adagas, instrumento musical, pacote de artista e 19 PO',
     equipmentOptions: [
@@ -203,15 +227,28 @@ export const CLASSES: DndClass[] = [
       sub('conhecimento', 'Colégio do Conhecimento', 'Saber é poder; palavras cortam mais que espadas.', [
         [3, 'Proficiências Adicionais', 'Proficiência em 3 perícias à sua escolha.'],
         [3, 'Palavras Cortantes', 'Reação: gaste Inspiração para subtrair o dado do ataque, teste ou dano de um inimigo.'],
-        [6, 'Segredos Mágicos', 'Duas magias de qualquer lista, sempre preparadas.'],
+        [6, 'Segredos Mágicos', 'Escolha duas magias das listas de Bardo, Clérigo, Druida ou Mago (truque ou magia de um círculo para o qual você tenha espaços). Elas ficam sempre preparadas e contam como magias de Bardo; ao subir de nível você pode trocar uma delas.'],
         [14, 'Perícia Incomparável', 'Se falhar num teste de habilidade, gaste Inspiração para somar o dado.'],
-      ]),
+      ], {
+        spellPicks: [{
+          id: 'conhecimento-segredos-magicos',
+          source: 'Colégio do Conhecimento — Segredos Mágicos',
+          level: 6,
+          count: 2,
+          fromClasses: ['bardo', 'clerigo', 'druida', 'mago'],
+          spellLevel: 0,
+          upToMaxSlot: true,
+          alwaysPrepared: true,
+          abilities: ['car'],
+          nota: 'Contam como magias de Bardo e ficam sempre preparadas, sem ocupar vaga na sua lista.',
+        }],
+      }),
       sub('bravura', 'Colégio da Bravura (Valor)', 'Bardos guerreiros que inspiram em batalha.', [
         [3, 'Inspiração em Combate', 'Aliados podem usar sua Inspiração para dano extra ou CA (reação).'],
         [3, 'Treinamento Marcial', 'Proficiência com armas marciais, armadura média e escudos.'],
         [6, 'Ataque Extra', 'Ataque duas vezes com a ação Atacar; pode trocar um ataque por um truque.'],
         [14, 'Magia de Batalha', 'Após conjurar magia com ação, faça um ataque com arma como Bônus.'],
-      ]),
+      ], { armor: ['Média', 'Escudos'], weapons: ['Marciais'] }),
     ],
   },
 
@@ -229,6 +266,7 @@ export const CLASSES: DndClass[] = [
     caster: 'completo',
     spellAbility: 'sab',
     preparedByLevel: PREP_FULL,
+    preparation: 'descanso-todas',
     cantripsByLevel: CANTRIPS_3_4_5,
     startingEquipment: 'Cota de malha (camisão), escudo, maça, símbolo sagrado, pacote de sacerdote e 7 PO',
     equipmentOptions: [
@@ -245,7 +283,13 @@ export const CLASSES: DndClass[] = [
         level: 1,
         desc: 'Escolha o papel que você cumpre no serviço divino.',
         options: [
-          { id: 'protetor', name: 'Protetor', desc: 'Você ganha proficiência com armas marciais e com armadura pesada.' },
+          {
+            id: 'protetor',
+            name: 'Protetor',
+            desc: 'Treinado para a batalha, você adquire proficiência com armas Marciais e treinamento com Armadura Pesada.',
+            armor: ['Pesada'],
+            weapons: ['Marciais'],
+          },
           { id: 'taumaturgo', name: 'Taumaturgo', desc: 'Você conhece mais um truque de Clérigo e soma seu modificador de Sabedoria (mín. +1) aos testes de Arcanismo e Religião.' },
         ],
       },
@@ -284,29 +328,61 @@ export const CLASSES: DndClass[] = [
     ],
     subclasses: [
       sub('vida', 'Domínio da Vida', 'A energia positiva que sustenta toda a vida.', [
+        [3, 'Magias de Domínio da Vida', 'Auxílio, Bênção, Curar Ferimentos e Restauração Menor ficam sempre preparadas; mais magias nos níveis 5, 7 e 9.'],
         [3, 'Discípulo da Vida', 'Magias de cura restauram PV adicional (2 + nível do espaço).'],
         [3, 'Preservar a Vida', 'Canalizar Divindade: distribua cura = 5 × nível de Clérigo entre criaturas feridas.'],
         [6, 'Curandeiro Abençoado', 'Curar outros também cura você.'],
         [17, 'Cura Suprema', 'Magias de cura usam o valor máximo dos dados.'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['auxilio', 'bencao', 'curar-ferimentos', 'restauracao-menor'],
+          5: ['palavra-curativa-em-massa', 'revivificar'],
+          7: ['aura-de-vida', 'protecao-contra-a-morte'],
+          9: ['curar-ferimentos-em-massa', 'restauracao-maior'],
+        }),
+      }),
       sub('luz', 'Domínio da Luz', 'Chamas purificadoras e luz reveladora.', [
+        [3, 'Magias de Domínio da Luz', 'Fogo das Fadas, Mãos Flamejantes, Raio Ardente e Ver o Invisível ficam sempre preparadas; mais magias nos níveis 5, 7 e 9.'],
         [3, 'Chama Protetora', 'Reação: imponha desvantagem num ataque contra você (usos = SAB mod.).'],
         [3, 'Explosão de Radiância', 'Canalizar Divindade: dano radiante em área ao seu redor (SG CON).'],
         [6, 'Clarão Aprimorado', 'Chama Protetora pode proteger aliados próximos.'],
         [17, 'Coroa de Luz', 'Emita luz solar; inimigos na luz têm desvantagem contra suas magias de fogo/radiante.'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['fogo-das-fadas', 'maos-flamejantes', 'raio-ardente', 'ver-o-invisivel'],
+          5: ['bola-de-fogo', 'luz-do-dia'],
+          7: ['muralha-de-fogo', 'olho-arcano'],
+          9: ['coluna-de-chamas', 'videncia'],
+        }),
+      }),
       sub('trapaca', 'Domínio da Trapaça', 'Ilusão, sombras e travessuras divinas.', [
+        [3, 'Magias de Domínio da Trapaça', 'Disfarçar-se, Enfeitiçar Pessoa, Invisibilidade e Passo Sem Rastro ficam sempre preparadas; mais magias nos níveis 5, 7 e 9.'],
         [3, 'Bênção do Trapaceiro', 'Dê vantagem em Furtividade a uma criatura (você incluso).'],
         [3, 'Invocar Duplicata', 'Canalizar Divindade: crie uma ilusão sua que conjura magias junto.'],
         [6, 'Passos da Trapaça', 'Bônus: teleporte-se trocando de lugar com sua duplicata.'],
         [17, 'Ladrão Aprimorado', 'Duplicatas extras e magias pela duplicata com vantagem.'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['disfarcar-se', 'enfeiticar-pessoa', 'invisibilidade', 'passo-sem-rastro'],
+          5: ['indetectavel', 'padrao-hipnotico'],
+          7: ['confusao', 'porta-dimensional'],
+          9: ['dominar-pessoa', 'modificar-memoria'],
+        }),
+      }),
       sub('guerra', 'Domínio da Guerra', 'Coragem e destreza em batalha como devoção.', [
+        [3, 'Magias de Domínio da Guerra', 'Arma Espiritual, Arma Mágica, Escudo da Fé e Raio Guia ficam sempre preparadas; mais magias nos níveis 5, 7 e 9.'],
         [3, 'Sacerdote de Guerra', 'Bônus: faça um ataque com arma (usos = SAB mod./descanso longo).'],
-        [3, 'Golpe Guiado', 'Canalizar Divindade: +10 num ataque (seu ou de aliado).'],
-        [6, 'Bênção do Deus da Guerra', 'Golpe Guiado como reação para aliados.'],
+        [3, 'Ataque Direcionado', 'Canalizar Divindade: +10 num ataque (seu ou de aliado a até 9 m).'],
+        [6, 'Bênção do Deus da Guerra', 'Ataque Direcionado como reação para aliados.'],
         [17, 'Avatar da Batalha', 'Resistência a dano Cortante, Perfurante e de Concussão.'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['arma-espiritual', 'arma-magica', 'escudo-da-fe', 'raio-guia'],
+          5: ['guardioes-espirituais', 'manto-do-cruzado'],
+          7: ['escudo-ardente', 'movimentacao-livre'],
+          9: ['golpe-de-arco', 'paralisar-monstro'],
+        }),
+      }),
     ],
   },
 
@@ -324,6 +400,7 @@ export const CLASSES: DndClass[] = [
     caster: 'completo',
     spellAbility: 'sab',
     preparedByLevel: PREP_FULL,
+    preparation: 'descanso-todas',
     cantripsByLevel: CANTRIPS_2_3_4,
     startingEquipment: 'Armadura de couro, escudo, foice, foco druídico, pacote de explorador e 9 PO',
     equipmentOptions: [
@@ -340,15 +417,21 @@ export const CLASSES: DndClass[] = [
         level: 1,
         desc: 'Escolha a sua vocação druídica.',
         options: [
-          { id: 'guardiao', name: 'Guardião', desc: 'Você ganha proficiência com armas marciais e com armadura média.' },
-          { id: 'mago-primal', name: 'Mago Primal', desc: 'Você conhece mais um truque de Druida e soma seu modificador de Sabedoria (mín. +1) aos testes de Arcanismo e Natureza.' },
+          {
+            id: 'guardiao',
+            name: 'Protetor',
+            desc: 'Treinado para a batalha, você adquire proficiência com armas Marciais e treinamento com Armadura Média.',
+            armor: ['Média'],
+            weapons: ['Marciais'],
+          },
+          { id: 'mago-primal', name: 'Xamã', desc: 'Você conhece mais um truque de Druida e soma seu modificador de Sabedoria (mín. +1) aos testes de Arcanismo e Natureza.' },
         ],
       },
     ],
     features: [
       { level: 1, name: 'Conjuração', desc: 'Você conjura magias de Druida usando Sabedoria.' },
       { level: 1, name: 'Druidismo', desc: 'Você conhece o truque Druidismo e a língua Druídica.' },
-      { level: 1, name: 'Ordem Primal', desc: 'Escolha: Guardião (armas marciais e armadura média) ou Mago Primal (+1 truque e bônus em Arcanismo/Natureza).' },
+      { level: 1, name: 'Ordem Primal', desc: 'Escolha: Protetor (armas marciais e armadura média) ou Xamã (+1 truque e bônus em Arcanismo/Natureza).' },
       { level: 2, name: 'Forma Selvagem', desc: 'Bônus: transforme-se em uma Besta (ND limitado pelo nível). Ganha PV temporário. Recupere 1 uso em descanso curto.' },
       { level: 2, name: 'Companheiro Selvagem', desc: 'Gaste um uso de Forma Selvagem para conjurar Encontrar Familiar (fada).' },
       subclassFeat(3, 'Círculo Druídico'),
@@ -371,33 +454,94 @@ export const CLASSES: DndClass[] = [
     ],
     subclasses: [
       sub('terra', 'Círculo da Terra', 'Magia da terra: florestas, desertos, montanhas.', [
-        [3, 'Magia do Círculo', 'Magias extras sempre preparadas conforme o terreno escolhido (Árido, Polar, Temperado ou Tropical).'],
+        [3, 'Magias de Círculo Druídico', 'Sempre que completar um Descanso Longo, escolha um terreno (Árido, Polar, Temperado ou Tropical): as magias daquele terreno até o seu nível ficam sempre preparadas.'],
         [3, 'Auxílio da Terra', 'Canalize a natureza: cure aliados e cause dano a um inimigo em área.'],
         [6, 'Recuperação Natural', 'Recupere espaços de magia num descanso curto (1×/descanso longo).'],
-        [10, 'Resiliência da Natureza', 'Resistência a um tipo de dano ligado ao seu terreno.'],
+        [10, 'Proteção Natural', 'Imune a Envenenado e resistência a um tipo de dano ligado ao seu terreno.'],
         [14, 'Santuário Natural', 'Bestas e plantas hesitam em te atacar (SG SAB).'],
-      ]),
+      ], {
+        choices: [{
+          id: 'terreno-druidico',
+          name: 'Terreno do Círculo da Terra',
+          level: 3,
+          desc: 'Escolha o terreno das suas Magias de Círculo Druídico. Você pode trocá-lo sempre que completar um Descanso Longo.',
+          options: [
+            {
+              id: 'arido', name: 'Árido', desc: 'Mãos Flamejantes, Raio de Fogo e Turvar (3º); Bola de Fogo (5º); Malogro (7º); Muralha de Pedra (9º). Resistência a dano Ígneo no nível 10.',
+              alwaysPrepared: semprePreparadas({
+                3: ['maos-flamejantes', 'raio-de-fogo', 'turvar'],
+                5: ['bola-de-fogo'],
+                7: ['malogro'],
+                9: ['muralha-de-pedra'],
+              }),
+            },
+            {
+              id: 'polar', name: 'Polar', desc: 'Névoa Obscurecente, Paralisar Pessoa e Raio de Gelo (3º); Nevasca (5º); Tempestade Glacial (7º); Cone de Frio (9º). Resistência a dano Gélido no nível 10.',
+              alwaysPrepared: semprePreparadas({
+                3: ['nevoa-obscurecente', 'paralisar-pessoa', 'raio-de-gelo'],
+                5: ['nevasca'],
+                7: ['tempestade-glacial'],
+                9: ['cone-de-frio'],
+              }),
+            },
+            {
+              id: 'temperado', name: 'Temperado', desc: 'Passo Nebuloso, Sono e Toque Chocante (3º); Relâmpago (5º); Movimentação Livre (7º); Passo Arbóreo (9º). Resistência a dano Elétrico no nível 10.',
+              alwaysPrepared: semprePreparadas({
+                3: ['passo-nebuloso', 'sono', 'toque-chocante'],
+                5: ['relampago'],
+                7: ['movimentacao-livre'],
+                9: ['passo-arboreo'],
+              }),
+            },
+            {
+              id: 'tropical', name: 'Tropical', desc: 'Bolha Ácida, Raio Nauseante e Teia (3º); Nuvem Fétida (5º); Polimorfia (7º); Praga de Insetos (9º). Resistência a dano Venenoso no nível 10.',
+              alwaysPrepared: semprePreparadas({
+                3: ['bolha-acida', 'raio-nauseante', 'teia'],
+                5: ['nuvem-fetida'],
+                7: ['polimorfia'],
+                9: ['praga-de-insetos'],
+              }),
+            },
+          ],
+        }],
+      }),
       sub('lua', 'Círculo da Lua', 'Metamorfos que dominam formas selvagens de combate.', [
         [3, 'Formas do Círculo', 'Formas Selvagens mais fortes: ND até 1/3 do nível, CA 13 + SAB, PV temporário maior.'],
-        [3, 'Magia Lunar', 'Magias sempre preparadas (Curar Ferimentos, Luar); conjure-as na Forma Selvagem.'],
+        [3, 'Magias do Círculo da Lua', 'Curar Ferimentos, Fagulha Estelar e Raio Lunar sempre preparadas (mais nos níveis 5, 7 e 9); podem ser conjuradas em Forma Selvagem.'],
         [6, 'Golpes Aprimorados do Círculo', 'Ataques na Forma Selvagem contam como mágicos; +1d10 radiante 1×/turno.'],
-        [10, 'Forma Lunar Aprimorada', 'Conjure Luar sem espaço 1×/dia; mova o luar de graça.'],
-        [14, 'Forma Lunar Suprema', 'Alterar-se à vontade; resistência enquanto o Luar estiver ativo.'],
-      ]),
+        [10, 'Forma Lunar Aprimorada', 'Conjure Raio Lunar sem espaço 1×/dia; mova o luar de graça.'],
+        [14, 'Forma Lunar Suprema', 'Alterar-se à vontade; resistência enquanto o Raio Lunar estiver ativo.'],
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['curar-ferimentos', 'fagulha-estelar', 'raio-lunar'],
+          5: ['invocar-animais'],
+          7: ['fonte-do-luar'],
+          9: ['curar-ferimentos-em-massa'],
+        }),
+      }),
       sub('mar', 'Círculo do Mar', 'A ira e o embalo do oceano.', [
         [3, 'Ira do Mar', 'Bônus: aura aquática que empurra e causa dano de frio (SG CON).'],
-        [3, 'Magia do Mar', 'Magias de tempestade sempre preparadas.'],
+        [3, 'Magias do Círculo do Mar', 'Despedaçar, Lufada de Vento, Névoa Obscurecente, Onda Trovejante e Raio de Gelo sempre preparadas; mais magias nos níveis 5, 7 e 9.'],
         [6, 'Afinidade Aquática', 'Deslocamento de natação; respire embaixo d’água.'],
         [10, 'Maré Vigorosa', 'Sua aura também cura ou reposiciona aliados.'],
         [14, 'Oceano Interior', 'Resistência a frio; sua aura alcança 9 m.'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['despedacar', 'lufada-de-vento', 'nevoa-obscurecente', 'onda-trovejante', 'raio-de-gelo'],
+          5: ['relampago', 'respirar-na-agua'],
+          7: ['controlar-agua', 'tempestade-glacial'],
+          9: ['invocar-elemental', 'paralisar-monstro'],
+        }),
+      }),
       sub('estrelas', 'Círculo das Estrelas', 'Constelações e presságios do céu noturno.', [
         [3, 'Forma Estelar', 'Bônus: gaste Forma Selvagem para assumir forma estelar: Arqueiro (ataque radiante), Cálice (cura extra) ou Dragão (concentração estável).'],
-        [3, 'Mapa Estelar', 'Truque Orientação e Raio Guiador sempre preparados; usos grátis de Raio Guiador.'],
+        [3, 'Mapa Estelar', 'Orientação e Raio Guia sempre preparados; conjure Raio Guia sem gastar espaço um número de vezes igual ao seu modificador de Sabedoria (mín. 1) por descanso longo.'],
         [6, 'Presságio Cósmico', 'Reação: some ou subtraia 1d6 de Testes D20 próximos (usos = prof.).'],
         [10, 'Constelações Cintilantes', 'Formas estelares melhoram (2d8); voo na forma estelar.'],
         [14, 'Corpo Estelar', 'Resistência a dano Cortante, Perfurante e de Concussão na Forma Estelar.'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({ 3: ['orientacao', 'raio-guia'] }),
+      }),
     ],
   },
 
@@ -475,14 +619,19 @@ export const CLASSES: DndClass[] = [
         [15, 'Crítico Superior', 'Crítico com 18-20.'],
         [18, 'Sobrevivente', 'Regeneração: recupere PV no início dos seus turnos quando ferido.'],
       ]),
-      sub('cavaleiro-arcano', 'Cavaleiro Arcano', 'Guerreiro que entrelaça magia arcana ao aço.', [
-        [3, 'Conjuração', 'Aprenda magias de Mago (foco em Abjuração/Evocação); truques e espaços de meio conjurador (1/3).'],
+      sub('cavaleiro-arcano', 'Cavaleiro Místico (Arcano)', 'Guerreiro que entrelaça magia arcana ao aço.', [
+        [3, 'Conjuração', 'Você conjura magias da lista de Mago usando Inteligência: 2 truques (3 no nível 10) e a lista de magias preparadas da tabela de Cavaleiro Místico. Ao subir de nível você pode trocar uma magia preparada e um truque.'],
         [3, 'Vínculo com Arma', 'Invoque armas vinculadas à sua mão; impossível ser desarmado.'],
         [7, 'Magia de Guerra', 'Após conjurar um truque, ataque como Bônus.'],
         [10, 'Golpe Sobrenatural', 'Seus ataques impõem desvantagem na salvaguarda contra sua próxima magia.'],
         [15, 'Carga Arcana', 'Teleporte-se ao usar Surto de Ação.'],
         [18, 'Magia de Guerra Aprimorada', 'Após conjurar qualquer magia, ataque como Bônus.'],
-      ]),
+      ], {
+        spellcasting: {
+          list: 'mago', ability: 'int', fromLevel: 3,
+          preparedByLevel: PREP_TERCO, cantripsByLevel: CANTRIPS_TERCO,
+        },
+      }),
       sub('guerreiro-psiquico', 'Guerreiro Psíquico', 'Poder psiônico canalizado em combate.', [
         [3, 'Poder Psiônico', 'Dados de Energia Psiônica (d6): Golpe Protegido (reduz dano), Golpe Psiônico (dano extra), Movimento Telecinético.'],
         [7, 'Adepto Telecinético', 'Impulso psíquico: voo curto, empurrões; dados viram d8.'],
@@ -586,6 +735,7 @@ export const CLASSES: DndClass[] = [
     caster: 'meio',
     spellAbility: 'car',
     preparedByLevel: PREP_HALF,
+    preparation: 'descanso-uma',
     startingEquipment: 'Cota de malha, escudo, espada longa, 6 azagaias, símbolo sagrado, pacote de sacerdote e 9 PO',
     equipmentOptions: [
       eq('Cota de malha, escudo, espada longa, 6 azagaias, símbolo sagrado, pacote de sacerdote e 9 PO', [
@@ -627,30 +777,66 @@ export const CLASSES: DndClass[] = [
     ],
     subclasses: [
       sub('devocao', 'Juramento de Devoção', 'Honestidade, coragem, compaixão e dever.', [
+        [3, 'Magias do Juramento da Devoção', 'Escudo da Fé e Proteção Contra o Bem e o Mal ficam sempre preparadas; mais magias nos níveis 5, 9, 13 e 17.'],
         [3, 'Arma Sagrada', 'Canalizar Divindade: some CAR aos ataques; a arma emite luz (10 min).'],
         [7, 'Aura de Devoção', 'Você e aliados na aura são imunes a Enfeitiçado.'],
         [15, 'Vontade Inabalável', 'Vantagem em salvaguardas contra magias de Encantamento.'],
         [20, 'Auréola Sagrada', 'Forma angelical: luz solar, dano radiante, salvaguardas superiores.'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['escudo-da-fe', 'protecao-contra-o-bem-e-o-mal'],
+          5: ['auxilio', 'zona-da-verdade'],
+          9: ['dissipar-magia', 'sinal-de-esperanca'],
+          13: ['defensor-da-fe', 'movimentacao-livre'],
+          17: ['coluna-de-chamas', 'comunhao'],
+        }),
+      }),
       sub('gloria', 'Juramento da Glória', 'Heroísmo destinado à lenda.', [
+        [3, 'Magias do Juramento da Glória', 'Heroísmo e Raio Guia ficam sempre preparadas; mais magias nos níveis 5, 9, 13 e 17.'],
         [3, 'Atleta Inspirador', 'Canalizar Divindade: impulsione proezas atléticas suas e de aliados.'],
         [3, 'Golpes Peerless', 'Dano extra com Canalizar Divindade.'],
-        [7, 'Aura de Coragem Atlética', 'Aliados na aura ganham deslocamento extra.'],
-        [15, 'Espírito Glorioso', 'Defesa Gloriosa: reação que aumenta CA e pune o atacante.'],
+        [7, 'Aura de Vivacidade', 'Seu deslocamento aumenta 3 m; aliados na aura também ganham 3 m.'],
+        [15, 'Defesa Gloriosa', 'Reação que aumenta a CA do alvo e pune o atacante.'],
         [20, 'Avatar da Glória', 'Velocidade e presença lendárias.'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['heroismo', 'raio-guia'],
+          5: ['aprimorar-atributo', 'arma-magica'],
+          9: ['celeridade', 'protecao-contra-energia'],
+          13: ['compulsao', 'movimentacao-livre'],
+          17: ['lendas-e-historias', 'presenca-regia-de-yolande'],
+        }),
+      }),
       sub('anciaes', 'Juramento dos Anciões', 'Preserve a luz, a vida e a alegria.', [
+        [3, 'Magias do Juramento dos Anciões', 'Falar com Animais e Golpe Constritor ficam sempre preparadas; mais magias nos níveis 5, 9, 13 e 17.'],
         [3, 'Ira da Natureza', 'Canalizar Divindade: prenda inimigos com vinhas espectrais (SG FOR).'],
-        [7, 'Aura de Proteção Feérica', 'Você e aliados têm resistência a dano de magias.'],
+        [7, 'Aura de Resistência', 'Você e aliados na aura têm resistência a dano Necrótico, Psíquico e Radiante.'],
         [15, 'Sentinela Imortal', '1×/dia, ao cair a 0 PV, fique com 1 PV; não envelhece.'],
         [20, 'Campeão Ancião', 'Forma primaveril: regeneração e magias aceleradas.'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['falar-com-animais', 'golpe-constritor'],
+          5: ['passo-nebuloso', 'raio-lunar'],
+          9: ['crescimento-de-plantas', 'protecao-contra-energia'],
+          13: ['pele-rocha', 'tempestade-glacial'],
+          17: ['comunhao-com-a-natureza', 'passo-arboreo'],
+        }),
+      }),
       sub('vinganca', 'Juramento de Vingança', 'Punir o mal a qualquer custo.', [
+        [3, 'Magias do Juramento da Vingança', 'Marca do Predador e Perdição ficam sempre preparadas; mais magias nos níveis 5, 9, 13 e 17.'],
         [3, 'Voto de Inimizade', 'Canalizar Divindade (Bônus): vantagem nos ataques contra um alvo por 1 minuto.'],
         [7, 'Andarilho Implacável', 'Ataques de oportunidade não custam sua reação... e seu alvo não escapa.'],
         [15, 'Alma de Vingança', 'Reação: ataque quem tem seu Voto quando ele atacar.'],
         [20, 'Anjo Vingador', 'Asas e aura de medo por 10 minutos.'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['marca-do-predador', 'perdicao'],
+          5: ['paralisar-pessoa', 'passo-nebuloso'],
+          9: ['celeridade', 'protecao-contra-energia'],
+          13: ['banimento', 'porta-dimensional'],
+          17: ['paralisar-monstro', 'videncia'],
+        }),
+      }),
     ],
   },
 
@@ -668,6 +854,7 @@ export const CLASSES: DndClass[] = [
     caster: 'meio',
     spellAbility: 'sab',
     preparedByLevel: PREP_HALF,
+    preparation: 'descanso-uma',
     startingEquipment: 'Armadura de couro batido, cimitarra, espada curta, arco longo com 20 flechas, pacote de explorador e 7 PO',
     equipmentOptions: [
       eq('Couro batido, cimitarra, espada curta, arco longo, aljava com 20 flechas, pacote de explorador e 7 PO', [
@@ -720,19 +907,37 @@ export const CLASSES: DndClass[] = [
         [15, 'Vínculo Partilhado', 'Compartilhe magias e teleportes com a besta.'],
       ]),
       sub('andarilho-feerico', 'Andarilho Feérico', 'Tocado pela magia das Cortes Feéricas.', [
+        [3, 'Magias do Andarilho Feérico', 'Enfeitiçar Pessoa fica sempre preparada; mais magias nos níveis 5, 9, 13 e 17.'],
         [3, 'Golpes Terríveis', 'Dano psíquico extra (1d4→1d6) 1×/turno.'],
-        [3, 'Presente Feérico', 'Magias de encantamento extras; charme sobrenatural em interações.'],
+        [3, 'Bênção Feérica', 'Charme sobrenatural em interações sociais.'],
         [7, 'Espelho Enevoado', 'Reação ao ser atacado: fique invisível e teleporte-se (usos = SAB).'],
         [11, 'Andarilho de Duas Mentes', 'Vantagem em salvaguardas mentais; compartilhe com aliados.'],
         [15, 'Nevoeiro Errante', 'Passo Nebuloso à vontade; traga aliados junto.'],
-      ]),
-      sub('perseguidor-sombrio', 'Perseguidor Sombrio (Gloom Stalker)', 'Caçador das trevas e do subterrâneo.', [
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['enfeiticar-pessoa'],
+          5: ['passo-nebuloso'],
+          9: ['convocar-feerico'],
+          13: ['porta-dimensional'],
+          17: ['despistar'],
+        }),
+      }),
+      sub('perseguidor-sombrio', 'Vigilante das Sombras (Gloom Stalker)', 'Caçador das trevas e do subterrâneo.', [
+        [3, 'Magias do Vigilante das Sombras', 'Disfarçar-se fica sempre preparada; mais magias nos níveis 5, 9, 13 e 17.'],
         [3, 'Emboscada Terrível', 'No 1º turno: +3 m, ataque adicional com +1d8; invisível para visão no escuro.'],
         [3, 'Visão Umbral', 'Visão no escuro 18 m (ou +18 m).'],
         [7, 'Ferro na Mente', 'Proficiência em salvaguardas de SAB.'],
         [11, 'Golpes Atrozes', 'Se errar um ataque, faça outro imediatamente.'],
         [15, 'Vulto Sombrio', 'Reação: fique invisível ao sofrer dano.'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['disfarcar-se'],
+          5: ['corda-extradimensional'],
+          9: ['medo'],
+          13: ['invisibilidade-maior'],
+          17: ['similaridade'],
+        }),
+      }),
     ],
   },
 
@@ -811,12 +1016,18 @@ export const CLASSES: DndClass[] = [
         [17, 'Rasgo na Mente', 'Sua lâmina pode Atordoar (SG SAB).'],
       ]),
       sub('trapaceiro-arcano', 'Trapaceiro Arcano', 'Ladino que tempera golpes com magia.', [
-        [3, 'Conjuração', 'Magias de Mago (foco em Ilusão/Encantamento); progressão de 1/3 de conjurador.'],
+        [3, 'Conjuração', 'Você conjura magias da lista de Mago usando Inteligência: 3 truques — Mãos Mágicas e mais dois (4 no nível 10) — e a lista de magias preparadas da tabela de Trapaceiro Arcano. Ao subir de nível você pode trocar uma magia preparada e um truque (exceto Mãos Mágicas).'],
         [3, 'Mão Mágica Ardilosa', 'Mão Mágica invisível; abra fechaduras e bata carteiras a distância.'],
         [9, 'Emboscada Mágica', 'Alvos que você surpreende têm desvantagem contra suas magias.'],
         [13, 'Trapaceiro Versátil', 'Use a Mão Mágica para distrair (vantagem em ataques).'],
         [17, 'Ladrão de Magias', 'Roube magias conjuradas contra você (SG do conjurador).'],
-      ]),
+      ], {
+        spellcasting: {
+          list: 'mago', ability: 'int', fromLevel: 3,
+          preparedByLevel: PREP_TERCO, cantripsByLevel: CANTRIPS_TERCO,
+        },
+        alwaysPrepared: semprePreparadas({ 3: ['maos-magicas'] }),
+      }),
     ],
   },
 
@@ -834,6 +1045,7 @@ export const CLASSES: DndClass[] = [
     caster: 'completo',
     spellAbility: 'car',
     preparedByLevel: PREP_SORC,
+    preparation: 'nivel-uma',
     cantripsByLevel: CANTRIPS_4_5_6,
     startingEquipment: '2 adagas, foco arcano (cristal), pacote de masmorra e 28 PO',
     equipmentOptions: [
@@ -868,11 +1080,19 @@ export const CLASSES: DndClass[] = [
     ],
     subclasses: [
       sub('draconica', 'Feitiçaria Dracônica', 'Sangue de dragão corre em suas veias.', [
+        [3, 'Magias Dracônicas', 'Alterar-se, Comando, Orbe Cromático e Sopro de Dragão ficam sempre preparadas; mais magias nos níveis 5, 7 e 9.'],
         [3, 'Resiliência Dracônica', 'PV +3 e +1/nível; sem armadura, CA = 10 + DES + CAR.'],
         [6, 'Afinidade Elemental', 'Some CAR ao dano do seu elemento dracônico; resistência a ele.'],
         [14, 'Asas de Dragão', 'Bônus: asas espectrais (voo 18 m).'],
         [18, 'Presença de Dragão', 'Aura de temor ou fascínio (SG SAB).'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['alterar-se', 'comando', 'orbe-cromatico', 'sopro-de-dragao'],
+          5: ['medo', 'voo'],
+          7: ['enfeiticar-monstro', 'olho-arcano'],
+          9: ['invocar-dragao', 'lendas-e-historias'],
+        }),
+      }),
       sub('selvagem', 'Feitiçaria Selvagem', 'Magia caótica e imprevisível.', [
         [3, 'Surto de Magia Selvagem', 'Suas magias podem disparar efeitos aleatórios da tabela de Magia Selvagem.'],
         [3, 'Marés do Caos', 'Ganhe vantagem em um Teste D20; recarrega com um surto.'],
@@ -881,17 +1101,33 @@ export const CLASSES: DndClass[] = [
         [18, 'Bombardeio Arcano', 'Dados máximos de dano explodem (role de novo e some).'],
       ]),
       sub('mecanica', 'Feitiçaria Mecânica (Relojoaria)', 'A ordem absoluta de Mechanus.', [
+        [3, 'Magias Mecânicas', 'Alarme, Auxílio, Proteção Contra o Bem e o Mal e Restauração Menor ficam sempre preparadas; mais magias nos níveis 5, 7 e 9.'],
         [3, 'Restaurar Equilíbrio', 'Cancele vantagem/desvantagem em Testes D20 próximos.'],
         [6, 'Bastião da Lei', 'Gaste pontos: barreira que absorve dano.'],
         [14, 'Passo entre Instantes', 'Reação: previna dano e reordene o tempo.'],
         [18, 'Ordem Absoluta', 'Cavaleiro da ordem: imunidades e auras de proteção.'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['alarme', 'auxilio', 'protecao-contra-o-bem-e-o-mal', 'restauracao-menor'],
+          5: ['dissipar-magia', 'protecao-contra-energia'],
+          7: ['invocar-constructo', 'movimentacao-livre'],
+          9: ['muralha-de-energia', 'restauracao-maior'],
+        }),
+      }),
       sub('aberrante', 'Feitiçaria Aberrante', 'Um toque do Reino Distante na sua mente.', [
-        [3, 'Fala Telepática', 'Telepatia com criaturas próximas; magias psíquicas extras.'],
-        [6, 'Guardas Psíquicas', 'Resistência a dano psíquico; retribua dano à mente atacante.'],
+        [3, 'Magias Psiônicas', 'Acalmar Emoções, Braços de Hadar, Detectar Pensamentos, Sussurros Dissonantes e Talho Mental ficam sempre preparadas; mais magias nos níveis 5, 7 e 9.'],
+        [3, 'Fala Telepática', 'Telepatia com criaturas próximas.'],
+        [6, 'Defesas Psíquicas', 'Resistência a dano psíquico; vantagem contra Amedrontado e Enfeitiçado.'],
         [14, 'Revelação em Carne', 'Gaste pontos: voe, nade, atravesse frestas.'],
         [18, 'Distorcer Realidade', 'Explosão psíquica devastadora em área.'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['acalmar-emocoes', 'bracos-de-hadar', 'detectar-pensamentos', 'sussurros-dissonantes', 'talho-mental'],
+          5: ['fome-de-hadar', 'remeter'],
+          7: ['invocar-aberracao', 'tentaculos-negros-de-evard'],
+          9: ['ligacao-telepatica-de-rary', 'telecinese'],
+        }),
+      }),
     ],
   },
 
@@ -909,7 +1145,20 @@ export const CLASSES: DndClass[] = [
     caster: 'pacto',
     spellAbility: 'car',
     preparedByLevel: PREP_WARLOCK,
+    preparation: 'nivel-uma',
     cantripsByLevel: CANTRIPS_2_3_4,
+    // Arcanum Místico: uma magia de 6º a 9º círculo, conjurável 1×/descanso longo.
+    spellPicks: [6, 7, 8, 9].map((circulo, i) => ({
+      id: `arcanum-mistico-${circulo}`,
+      source: `Arcanum Místico (${circulo}º círculo)`,
+      level: 11 + i * 2,
+      count: 1,
+      fromClasses: ['bruxo'],
+      spellLevel: circulo,
+      abilities: ['car'] as const as AbilityKey[],
+      freeUses: 'longo' as const,
+      nota: 'Conjurável 1×/descanso longo sem gastar espaço de Pacto.',
+    })),
     startingEquipment: 'Armadura de couro, foice, 2 adagas, foco arcano (orbe), livro de conhecimento, pacote de estudioso e 15 PO',
     equipmentOptions: [
       eq('Armadura de couro, foice curta, 2 adagas, foco arcano (orbe), livro de ocultismo, pacote de estudioso e 15 PO', [
@@ -944,30 +1193,62 @@ export const CLASSES: DndClass[] = [
     ],
     subclasses: [
       sub('arquifada', 'Patrono Arquifada', 'Um senhor feérico caprichoso e poderoso.', [
-        [3, 'Passos Feéricos', 'Passo Nebuloso grátis (usos = prof.); efeitos extras ao teleportar: PV temporário, medo, invisibilidade.'],
+        [3, 'Magias de Pacto da Arquifada', 'Acalmar Emoções, Fogo das Fadas, Força Espectral, Passo Nebuloso e Sono ficam sempre preparadas; mais magias nos níveis 5, 7 e 9.'],
+        [3, 'Passos Feéricos', 'Passo Nebuloso sem gastar espaço (usos = CAR, mín. 1) por descanso longo.'],
         [6, 'Escape Enevoado', 'Reação ao sofrer dano: teleporte-se com um benefício.'],
         [10, 'Defesas Enfeitiçadas', 'Imunidade a Enfeitiçado; redirecione encantamentos.'],
-        [14, 'Delírio Sombrio', 'Mergulhe uma criatura em ilusões (SG SAB).'],
-      ]),
+        [14, 'Magia Sedutora', 'Após conjurar Encantamento ou Ilusão, conjure Passo Nebuloso de graça na mesma ação.'],
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['acalmar-emocoes', 'fogo-das-fadas', 'forca-espectral', 'passo-nebuloso', 'sono'],
+          5: ['crescimento-de-plantas', 'piscar'],
+          7: ['dominar-fera', 'invisibilidade-maior'],
+          9: ['dominar-pessoa', 'similaridade'],
+        }),
+      }),
       sub('celestial', 'Patrono Celestial', 'Poder dos Planos Superiores.', [
+        [3, 'Magias do Celestial', 'Auxílio, Chama Sagrada, Curar Ferimentos, Luz, Raio Guia e Restauração Menor ficam sempre preparadas; mais magias nos níveis 5, 7 e 9.'],
         [3, 'Luz Curativa', 'Reserva de d6s de cura (1 + nível); cure como Bônus.'],
-        [3, 'Magias Radiantes', 'Chama Sagrada, Curar Ferimentos e magias de luz extras.'],
-        [6, 'Alma Radiante', 'Resistência radiante; some CAR ao dano radiante/fogo.'],
+        [6, 'Alma Radiante', 'Resistência radiante; some CAR ao dano radiante/ígneo 1×/turno.'],
         [10, 'Resiliência Celestial', 'PV temporário para você e aliados após descansos.'],
         [14, 'Vingança Flamejante', 'Ao cair a 0 PV, exploda em luz radiante e levante-se.'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['auxilio', 'chama-sagrada', 'curar-ferimentos', 'luz', 'raio-guia', 'restauracao-menor'],
+          5: ['luz-do-dia', 'revivificar'],
+          7: ['defensor-da-fe', 'muralha-de-fogo'],
+          9: ['convocar-celestial', 'restauracao-maior'],
+        }),
+      }),
       sub('infernal', 'Patrono Ínfero (Fiend)', 'Um pacto com poderes dos Planos Inferiores.', [
+        [3, 'Magias de Pacto do Ínfero', 'Comando, Mãos Flamejantes, Raio Ardente e Sugestão ficam sempre preparadas; mais magias nos níveis 5, 7 e 9.'],
         [3, 'Bênção do Tinhoso', 'Ao reduzir um inimigo a 0 PV, ganhe PV temporário (CAR + nível).'],
         [6, 'Sorte do Tinhoso', 'Some 1d10 a um Teste D20 (1×/descanso curto).'],
         [10, 'Resiliência Ínfera', 'Escolha uma resistência a dano a cada descanso.'],
         [14, 'Arremessar Através do Inferno', 'Ao acertar, envie o alvo numa viagem infernal: 8d10 psíquico (SG CAR).'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['comando', 'maos-flamejantes', 'raio-ardente', 'sugestao'],
+          5: ['bola-de-fogo', 'nuvem-fetida'],
+          7: ['escudo-ardente', 'muralha-de-fogo'],
+          9: ['missao', 'praga-de-insetos'],
+        }),
+      }),
       sub('grande-antigo', 'Patrono Grande Antigo', 'Entidades incompreensíveis de além das estrelas.', [
-        [3, 'Mente Desperta', 'Telepatia; Ataque Psíquico: troque o dano de magias para psíquico.'],
-        [6, 'Escudo Entrópico', 'Reação: imponha desvantagem num ataque; se errar, vantagem no seu próximo.'],
+        [3, 'Magias de Pacto do Grande Antigo', 'Detectar Pensamentos, Força Espectral, Gargalhada Nefasta de Tasha e Sussurros Dissonantes ficam sempre preparadas; mais magias nos níveis 5, 7 e 9.'],
+        [3, 'Magias Psíquicas', 'Troque o dano das suas magias de Bruxo para Psíquico; Encantamento e Ilusão sem componentes V/S.'],
+        [3, 'Mente Desperta', 'Conexão telepática com uma criatura próxima.'],
+        [6, 'Combatente Clarividente', 'A criatura ligada a você faz salvaguarda de SAB ou fica em desvantagem contra você.'],
         [10, 'Proteção Talássica', 'PV temporário ao conjurar; resistência psíquica.'],
         [14, 'Criar Escravo (Servo)', 'Enfeitice uma criatura tocada permanentemente (SG SAB).'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({
+          3: ['detectar-pensamentos', 'forca-espectral', 'gargalhada-nefasta-de-tasha', 'sussurros-dissonantes'],
+          5: ['clarividencia', 'fome-de-hadar'],
+          7: ['confusao', 'invocar-aberracao'],
+          9: ['modificar-memoria', 'telecinese'],
+        }),
+      }),
     ],
   },
 
@@ -985,6 +1266,7 @@ export const CLASSES: DndClass[] = [
     caster: 'completo',
     spellAbility: 'int',
     preparedByLevel: PREP_WIZARD,
+    preparation: 'grimorio',
     cantripsByLevel: CANTRIPS_3_4_5,
     startingEquipment: '2 adagas, foco arcano (bastão), robe, grimório, pacote de estudioso e 5 PO',
     equipmentOptions: [
@@ -1019,9 +1301,11 @@ export const CLASSES: DndClass[] = [
       sub('abjurador', 'Abjurador', 'Mestre das proteções mágicas.', [
         [3, 'Escudo Arcano', 'Escudo protetor com PV = 2× nível + INT; absorve dano por você.'],
         [6, 'Recarga Projetada', 'Recarregue o Escudo Arcano com espaços de magia.'],
-        [10, 'Abjuração Aprimorada', 'Some prof. a testes de Contramagia e Dissipar Magia; Contramagia sempre preparada.'],
+        [10, 'Rompe-Magia', 'Contramagia e Dissipar Magia sempre preparadas; some seu bônus de proficiência ao teste e conjure Dissipar Magia como ação Bônus.'],
         [14, 'Resistência a Magias', 'Vantagem em salvaguardas contra magias; resistência ao dano delas.'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({ 10: ['contramagia', 'dissipar-magia'] }),
+      }),
       sub('adivinho', 'Adivinho', 'Vislumbres do futuro moldam o presente.', [
         [3, 'Portento', 'Role 2d20 após descanso longo; substitua qualquer Teste D20 por eles.'],
         [6, 'Adivinhação Perita', 'Magias de Adivinhação de 2º+ restauram espaços menores.'],
@@ -1037,10 +1321,12 @@ export const CLASSES: DndClass[] = [
       ]),
       sub('ilusionista', 'Ilusionista', 'A realidade é uma sugestão.', [
         [3, 'Ilusões Aprimoradas', 'Ilusão Menor grátis e melhor; magias de ilusão sem componentes verbais.'],
-        [6, 'Ilusão Fantasmal', 'Ilusões parcialmente reais: causem dano psíquico.'],
+        [6, 'Criaturas Espectrais', 'Convocar Feérico e Invocar Fera sempre preparadas; podem virar Ilusão e ser conjuradas sem espaço (com metade dos PV).'],
         [10, 'Eu Ilusório', 'Reação: um duplo ilusório faz um ataque errar você (recarrega com magia de ilusão).'],
         [14, 'Realidade Ilusória', 'Torne um objeto ilusório real por 1 minuto.'],
-      ]),
+      ], {
+        alwaysPrepared: semprePreparadas({ 6: ['convocar-feerico', 'invocar-fera'] }),
+      }),
     ],
   },
 ]
@@ -1094,6 +1380,33 @@ export const HALF_CASTER_SLOTS: number[][] = [
   [4, 3, 3, 3, 1],
   [4, 3, 3, 3, 2],
   [4, 3, 3, 3, 2],
+]
+
+/**
+ * Conjurador de 1/3 (Cavaleiro Místico e Trapaceiro Arcano): a conjuração só
+ * começa no 3º nível, então as duas primeiras linhas são vazias.
+ */
+export const THIRD_CASTER_SLOTS: number[][] = [
+  [0, 0, 0, 0],
+  [0, 0, 0, 0],
+  [2, 0, 0, 0],
+  [3, 0, 0, 0],
+  [3, 0, 0, 0],
+  [3, 0, 0, 0],
+  [4, 2, 0, 0],
+  [4, 2, 0, 0],
+  [4, 2, 0, 0],
+  [4, 3, 0, 0],
+  [4, 3, 0, 0],
+  [4, 3, 0, 0],
+  [4, 3, 2, 0],
+  [4, 3, 2, 0],
+  [4, 3, 2, 0],
+  [4, 3, 3, 0],
+  [4, 3, 3, 0],
+  [4, 3, 3, 0],
+  [4, 3, 3, 1],
+  [4, 3, 3, 1],
 ]
 
 /** Pacto do Bruxo: [quantidade de espaços, nível do espaço] */

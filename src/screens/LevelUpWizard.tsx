@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react'
 import type { AbilityKey, AsiChoice, Character, Spell } from '../types'
 import { ABILITIES, ABILITY_NAMES } from '../types'
 import { classById } from '../data/classes'
-import { SPELLS, spellById } from '../data/spells'
+import { spellById } from '../data/spells'
 import { GENERAL_FEATS, featById } from '../data/feats'
 import {
-  abilityMod, cantripLimit, finalAbilities, levelUpSummary, maxSpellLevel, pendingChoices, preparedLimit,
-  spellPickGroups,
+  PREPARATION_RULES, abilityMod, alwaysPreparedSpells, availableCantrips, cantripLimit,
+  classSpellCatalog, finalAbilities, knownCantripIds, levelUpSummary, maxSpellLevel, pendingChoices,
+  preparationMode, preparedLimit, preparedSpellIds, spellPickGroups, type ResolvedChoice,
 } from '../engine/rules'
 import { rollHitDie } from '../engine/dice'
 import { useStore } from '../store/store'
@@ -18,7 +19,6 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
   const update = useStore((s) => s.updateCharacter)
   const novoNivel = char.level + 1
   const cls = classById(char.classId)!
-  const resumo = useMemo(() => levelUpSummary(char, novoNivel), [char, novoNivel])
 
   const [hpMode, setHpMode] = useState<'media' | 'rolar'>('media')
   const [hpRoll, setHpRoll] = useState<number | null>(null)
@@ -33,6 +33,14 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
   /** magias escolhidas nos grupos que não vêm da lista da classe */
   const [picks, setPicks] = useState<Record<string, string[]>>({})
 
+  // A subclasse escolhida agora já vale para tudo que vem a seguir: características,
+  // escolhas próprias da subclasse (terreno druídico) e magias sempre preparadas.
+  const subclasseAtual = subclassId ?? char.subclassId
+  const resumo = useMemo(
+    () => levelUpSummary({ ...char, subclassId: subclasseAtual }, novoNivel),
+    [char, subclasseAtual, novoNivel],
+  )
+
   if (!resumo) return null
   if (novoNivel > 20) {
     return (
@@ -43,25 +51,31 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
   }
 
   const abs = finalAbilities(char)
-  const draftDepois: Character = { ...char, level: novoNivel }
-  const truquesAtuais = char.spellsKnown.filter((id) => spellById(id)?.level === 0).length
-  const truquesNovos = Math.max(0, cantripLimit(draftDepois) - truquesAtuais)
+  const draftDepois: Character = { ...char, level: novoNivel, subclassId: subclasseAtual }
+  const modo = preparationMode(draftDepois)
   const maxLvl = maxSpellLevel(draftDepois)
 
-  const magiasAtuais = char.spellsKnown.filter((id) => (spellById(id)?.level ?? 0) > 0).length
+  const truquesAtuais = knownCantripIds(char).length
+  const truquesNovos = Math.max(0, cantripLimit(draftDepois) - truquesAtuais)
+
   const limiteDepois = preparedLimit(draftDepois) ?? 0
-  const magiasNovas = Math.max(0, limiteDepois - magiasAtuais)
+  // O Mago não "prepara mais": ele copia 2 magias novas para o grimório a cada nível.
+  const magiasNovas = modo === 'grimorio'
+    ? 2
+    : Math.max(0, limiteDepois - preparedSpellIds(char).length)
 
-  const disponiveisTruques = SPELLS.filter(
-    (s) => s.level === 0 && s.classes.includes(char.classId) && !char.spellsKnown.includes(s.id),
-  )
-  const disponiveisMagias = SPELLS.filter(
-    (s) => s.level >= 1 && s.level <= maxLvl && s.classes.includes(char.classId) && !char.spellsKnown.includes(s.id),
+  const disponiveisTruques = availableCantrips(draftDepois).filter((s) => !char.spellsKnown.includes(s.id))
+  const disponiveisMagias = classSpellCatalog(draftDepois).filter((s) => !char.spellsKnown.includes(s.id))
+
+  // Magias que a subclasse passa a manter sempre preparadas neste nível
+  const novasAutomaticas = alwaysPreparedSpells(draftDepois).filter(
+    (m) => !alwaysPreparedSpells({ ...char, subclassId: subclasseAtual }).some((a) => a.spell.id === m.spell.id),
   )
 
-  // Escolhas de espécie/classe desbloqueadas até o novo nível e ainda não feitas
-  const escolhasPendentes = pendingChoices(char, novoNivel)
-  const escolhaSelecionada = (source: 'especie' | 'classe', groupId: string) =>
+  // Escolhas de espécie/classe/subclasse desbloqueadas até o novo nível e ainda não feitas
+  const escolhasPendentes = pendingChoices({ ...char, subclassId: subclasseAtual }, novoNivel)
+  // 'subclasse' compartilha o balde de escolhas da classe.
+  const escolhaSelecionada = (source: ResolvedChoice['source'], groupId: string) =>
     source === 'especie' ? novasEscolhasEspecie[groupId] : novasEscolhasClasse[groupId]
   const escolhasOk = escolhasPendentes.every((e) => !!escolhaSelecionada(e.source, e.group.id))
 
@@ -133,14 +147,19 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
 
     update(char.id, {
       level: novoNivel,
-      subclassId: subclassId ?? char.subclassId,
+      subclassId: subclasseAtual,
       asiChoices,
       hpRolls,
       speciesChoices: { ...(char.speciesChoices ?? {}), ...novasEscolhasEspecie },
       classChoices: { ...(char.classChoices ?? {}), ...novasEscolhasClasse },
       spellPicks: { ...(char.spellPicks ?? {}), ...picks },
       spellsKnown: [...char.spellsKnown, ...novosTruques, ...novasMagias],
-      spellsPrepared: [...char.spellsPrepared, ...novosTruques, ...novasMagias],
+      // No grimório as magias novas entram no livro; a preparação é refeita no descanso longo.
+      spellsPrepared: modo === 'grimorio'
+        ? char.spellsPrepared
+        : [...char.spellsPrepared, ...novasMagias],
+      // Bardo, Bruxo, Feiticeiro e as subclasses conjuradoras trocam uma magia por nível.
+      spellSwaps: modo === 'nivel-uma' ? (char.spellSwaps ?? 0) + 1 : char.spellSwaps,
     })
     onClose()
   }
@@ -317,6 +336,22 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
         </Card>
       )}
 
+      {/* --- Magias que a subclasse passa a manter sempre preparadas --- */}
+      {novasAutomaticas.length > 0 && (
+        <Card title="Magias Sempre Preparadas">
+          <p className="muted tiny" style={{ marginBottom: 10 }}>
+            Estas magias passam a ficar sempre preparadas — você não precisa escolhê-las e
+            elas não ocupam vaga no seu limite de magias preparadas.
+          </p>
+          {novasAutomaticas.map((m) => (
+            <div className="feature" key={m.spell.id}>
+              <h4>{m.spell.name} <span className="muted tiny">· {m.spell.level === 0 ? 'truque' : `${m.spell.level}º círculo`}</span></h4>
+              <p>{m.source} · {m.spell.school} · {m.spell.castingTime} · {m.spell.range}</p>
+            </div>
+          ))}
+        </Card>
+      )}
+
       {/* --- Novos truques --- */}
       {truquesNovos > 0 && (
         <Card title={`Novos Truques (${novosTruques.length}/${truquesNovos})`}>
@@ -330,12 +365,25 @@ export function LevelUpWizard({ char, onClose }: { char: Character; onClose: () 
         </Card>
       )}
 
+      {/* --- Troca concedida pelo nível (Bardo, Bruxo, Feiticeiro e subclasses conjuradoras) --- */}
+      {modo === 'nivel-uma' && (
+        <Card title="Troca de Magia Preparada">
+          <p className="muted tiny">
+            {PREPARATION_RULES['nivel-uma'].texto} Ao confirmar este nível você ganha
+            <strong className="gold"> 1 troca</strong>: use o botão <strong>⇄</strong> ao lado de uma
+            magia na aba Magias para substituí-la. Truques podem ser trocados pelo botão
+            <strong> Escolher</strong>, na mesma aba.
+          </p>
+        </Card>
+      )}
+
       {/* --- Novas magias --- */}
       {magiasNovas > 0 && (
-        <Card title={`Novas Magias (${novasMagias.length}/${magiasNovas})`}>
+        <Card title={modo === 'grimorio' ? `Novas Magias no Grimório (${novasMagias.length}/${magiasNovas})` : `Novas Magias Preparadas (${novasMagias.length}/${magiasNovas})`}>
           <p className="muted tiny" style={{ marginBottom: 10 }}>
-            Você agora {char.classId === 'mago' ? 'adiciona ao grimório' : 'prepara'} até {limiteDepois} magias,
-            de até {maxLvl}º nível.
+            {modo === 'grimorio'
+              ? `Você copia 2 magias de Mago de até ${maxLvl}º nível para o grimório. A lista de preparadas (até ${limiteDepois}) você redefine em cada descanso longo.`
+              : `Sua lista de magias preparadas sobe para ${limiteDepois}, com magias de até ${maxLvl}º nível.`}
           </p>
           <ChoiceAccordion>
             {disponiveisMagias.map((s) => (

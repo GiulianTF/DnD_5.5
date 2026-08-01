@@ -10,7 +10,7 @@ import { SpellsTab } from './tabs/SpellsTab'
 import { LevelUpWizard } from './LevelUpWizard'
 import { Card, Choice, ChoiceAccordion, ChoiceGroup, Sheet } from '../components/ui'
 import { useStore } from '../store/store'
-import { characterChoices, speciesLabel } from '../engine/rules'
+import { characterChoices, speciesLabel, type ResolvedChoice } from '../engine/rules'
 import { ORIGIN_FEATS, featById } from '../data/feats'
 import { backgroundById } from '../data/backgrounds'
 
@@ -36,7 +36,8 @@ export function CharacterSheet({ char, onBack }: { char: Character; onBack: () =
   const escolhas = characterChoices(char)
   const bg = backgroundById(char.backgroundId)
 
-  const escolher = (source: 'especie' | 'classe', groupId: string, optionId: string) => {
+  // Escolhas de subclasse (terreno do Círculo da Terra) moram no mesmo balde da classe.
+  const escolher = (source: ResolvedChoice['source'], groupId: string, optionId: string) => {
     if (source === 'especie') {
       update(char.id, (c) => ({ speciesChoices: { ...(c.speciesChoices ?? {}), [groupId]: optionId } }))
     } else {

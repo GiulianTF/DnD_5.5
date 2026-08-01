@@ -1,121 +1,179 @@
 import { useState } from 'react'
 import type { Character, Spell } from '../../types'
 import { ABILITY_NAMES } from '../../types'
-import { SPELLS, spellById } from '../../data/spells'
+import { spellById } from '../../data/spells'
 import { classById } from '../../data/classes'
 import {
-  cantripLimit, fmtMod, innateSpells, innateUsesLabel, maxSpellLevel, pactSlots, preparedLimit,
-  spellSlots, spellcasting,
+  PREPARATION_RULES, alwaysPreparedSpells, availableCantrips, cantripLimit, classSpellCatalog,
+  fmtMod, innateSpells, innateUsesLabel, knownCantripIds, pactSlots, preparableSpells,
+  preparationMode, preparedLimit, preparedSpellIds, spellListClasses, spellSlots, spellcasting,
+  subclassOf,
 } from '../../engine/rules'
-import { speciesById } from '../../data/species'
 import { useStore } from '../../store/store'
 import { Card, Empty, Sheet, SpellText } from '../../components/ui'
 
 const ORDINAIS = ['Truques', '1º Nível', '2º Nível', '3º Nível', '4º Nível', '5º Nível', '6º Nível', '7º Nível', '8º Nível', '9º Nível']
 
+const resumoMagia = (s: Spell) =>
+  `${s.school} · ${s.castingTime} · ${s.range}${s.concentration ? ' · Concentração' : ''}${s.ritual ? ' · Ritual' : ''}`
+
 export function SpellsTab({ char }: { char: Character }) {
   const { updateCharacter, spendSlot, spendPactSlot } = useStore()
-  const [browser, setBrowser] = useState(false)
   const [detail, setDetail] = useState<string | null>(null)
+  /** folha aberta: preparação de magias, escolha de truques ou grimório */
+  const [folha, setFolha] = useState<'preparar' | 'truques' | 'grimorio' | null>(null)
+  /** id da magia que está sendo substituída numa troca */
+  const [trocando, setTrocando] = useState<string | null>(null)
 
   const cls = classById(char.classId)
   const sc = spellcasting(char)
   const slots = spellSlots(char)
   const pact = pactSlots(char)
-  const prepLimit = preparedLimit(char)
-  const cantripMax = cantripLimit(char)
-  const maxLvl = maxSpellLevel(char)
+  const modo = preparationMode(char)
+  const subclasse = subclassOf(char)
 
-  // Truques e magias concedidos pela espécie/linhagem valem para qualquer classe.
+  // Truques e magias concedidos pela espécie, linhagem e talentos valem para qualquer classe.
   const inatas = innateSpells(char)
-  const especie = speciesById(char.speciesId)
+  const automaticas = alwaysPreparedSpells(char)
 
-  const cardEspecie = inatas.length > 0 && (
-    <Card title={`Magias de ${especie?.name ?? 'Espécie'}`}>
+  const cardInatas = inatas.length > 0 && (
+    <Card title="Magias de Espécie e Talentos">
       <p className="muted tiny" style={{ marginBottom: 10 }}>
-        Concedidas pelos traços da sua espécie — você as tem além das magias da classe e elas
-        não ocupam espaço no seu repertório.
+        Concedidas pelos seus traços e talentos — você as tem além das magias da classe e elas
+        não ocupam vaga no seu limite de preparadas.
       </p>
       {inatas.map((m) => (
         <div className="list-item eq" key={m.spell.id}>
-          <div className="spread">
-            <div style={{ flex: 1 }} onClick={() => setDetail(m.spell.id)}>
-              <strong style={{ fontSize: '.92rem' }}>
-                {m.spell.name} <span className="muted tiny">({m.spell.level === 0 ? 'truque' : `${m.spell.level}º`})</span>
-              </strong>
-              <div className="tiny muted">
-                {m.spell.school} · {m.spell.castingTime} · {m.spell.range}
-                {m.spell.concentration ? ' · Concentração' : ''}
-              </div>
-              <div className="tiny gold">
-                {m.source} · {innateUsesLabel(char, m.freeUses)}
-              </div>
-              <div className="tiny muted">
-                {ABILITY_NAMES[m.ability]} · CD {m.saveDC} · ataque {fmtMod(m.attackBonus)}
-              </div>
-              {m.nota && <div className="tiny muted">{m.nota}</div>}
+          <div style={{ flex: 1 }} onClick={() => setDetail(m.spell.id)}>
+            <strong style={{ fontSize: '.92rem' }}>
+              {m.spell.name} <span className="muted tiny">({m.spell.level === 0 ? 'truque' : `${m.spell.level}º`})</span>
+            </strong>
+            <div className="tiny muted">{resumoMagia(m.spell)}</div>
+            <div className="tiny gold">{m.source}{innateUsesLabel(char, m.freeUses) && ` · ${innateUsesLabel(char, m.freeUses)}`}</div>
+            <div className="tiny muted">
+              {ABILITY_NAMES[m.ability]} · CD {m.saveDC} · ataque {fmtMod(m.attackBonus)}
             </div>
+            {m.nota && <div className="tiny muted">{m.nota}</div>}
           </div>
         </div>
       ))}
     </Card>
   )
 
-  // Quem não conjura pela classe ainda pode ter magias de espécie — mostramos só elas.
-  if (!sc || !cls) {
-    if (inatas.length === 0) {
+  const cardAutomaticas = automaticas.length > 0 && (
+    <Card title="Magias Sempre Preparadas">
+      <p className="muted tiny" style={{ marginBottom: 10 }}>
+        Concedidas por características como {subclasse?.name ?? 'sua subclasse'}. Elas estão
+        sempre prontas, são conjuradas gastando seus espaços de magia normalmente e
+        <strong> não contam</strong> no seu limite de magias preparadas.
+      </p>
+      {automaticas.map((m) => (
+        <div className="list-item eq" key={m.spell.id}>
+          <div style={{ flex: 1 }} onClick={() => setDetail(m.spell.id)}>
+            <strong style={{ fontSize: '.92rem' }}>
+              {m.spell.name} <span className="muted tiny">({m.spell.level === 0 ? 'truque' : `${m.spell.level}º`})</span>
+            </strong>
+            <div className="tiny muted">{resumoMagia(m.spell)}</div>
+            <div className="tiny gold">{m.source}</div>
+          </div>
+        </div>
+      ))}
+    </Card>
+  )
+
+  // Quem não conjura pela classe ainda pode ter magias de espécie ou de subclasse.
+  if (!sc || !cls || !modo) {
+    if (inatas.length === 0 && automaticas.length === 0) {
       return (
         <Empty
           icon="✨"
           title={`${cls?.name ?? 'Esta classe'} não conjura magias`}
-          hint="Subclasses como Cavaleiro Arcano e Trapaceiro Arcano ganham conjuração no 3º nível."
+          hint="Subclasses como Cavaleiro Místico e Trapaceiro Arcano ganham conjuração no 3º nível."
         />
       )
     }
     return (
       <div>
         <div className="banner">
-          {cls?.name ?? 'Sua classe'} não conjura magias, mas a sua espécie concede as magias abaixo.
+          {cls?.name ?? 'Sua classe'} não conjura magias de classe, mas as magias abaixo vêm
+          dos seus traços e características.
         </div>
-        {cardEspecie}
+        {cardAutomaticas}
+        {cardInatas}
         {detail && <DetalheMagia id={detail} onClose={() => setDetail(null)} />}
       </div>
     )
   }
 
-  const conhecidas = char.spellsKnown.map((id) => spellById(id)).filter((s): s is Spell => !!s)
-  const preparadas = char.spellsPrepared
-  const truquesConhecidos = conhecidas.filter((s) => s.level === 0)
-  const magiasConhecidas = conhecidas.filter((s) => s.level > 0)
-  const preparadasCount = magiasConhecidas.filter((s) => preparadas.includes(s.id)).length
+  const regra = PREPARATION_RULES[modo]
+  const trocasDisponiveis = char.spellSwaps ?? 0
 
-  const togglePrepared = (id: string) => {
-    const s = spellById(id)
-    if (!s) return
-    if (s.level === 0) return // truques estão sempre disponíveis
-    updateCharacter(char.id, (c) => ({
-      spellsPrepared: c.spellsPrepared.includes(id)
-        ? c.spellsPrepared.filter((x) => x !== id)
-        : [...c.spellsPrepared, id],
-    }))
-  }
+  const limitePreparadas = preparedLimit(char) ?? 0
+  const preparadasIds = preparedSpellIds(char)
+  const preparadas = preparadasIds.map((id) => spellById(id)).filter((s): s is Spell => !!s)
+  const vagasLivres = limitePreparadas - preparadas.length
+  /*
+   * Clérigo, Druida e Mago editam a lista à vontade. Nas demais classes a troca
+   * custa um uso — exceto quando a lista está acima do limite (fichas antigas ou
+   * uma perda de nível), quando tirar magias sobrando é sempre permitido.
+   */
+  const excedente = preparadas.length > limitePreparadas
+  const trocaLivre = modo === 'descanso-todas' || modo === 'grimorio' || excedente
 
-  const addSpell = (id: string) => {
+  const limiteTruques = cantripLimit(char)
+  const truquesIds = knownCantripIds(char)
+  const truques = truquesIds.map((id) => spellById(id)).filter((s): s is Spell => !!s)
+
+  // O que a subclasse já mantém preparado sai das listas de escolha — não faz
+  // sentido gastar uma vaga com uma magia que você já tem de graça.
+  const jaAutomatica = new Set(automaticas.map((m) => m.spell.id))
+  const candidatas = preparableSpells(char).filter((s) => !jaAutomatica.has(s.id))
+  const catalogo = classSpellCatalog(char).filter((s) => !jaAutomatica.has(s.id))
+  const truquesCandidatos = availableCantrips(char).filter((s) => !jaAutomatica.has(s.id))
+  const grimorio = char.spellsKnown
+    .map((id) => spellById(id))
+    .filter((s): s is Spell => !!s && s.level > 0)
+
+  // ---------- Ações ----------
+  /** Prepara uma magia numa vaga livre. */
+  const preparar = (id: string) =>
     updateCharacter(char.id, (c) => ({
+      spellsPrepared: c.spellsPrepared.includes(id) ? c.spellsPrepared : [...c.spellsPrepared, id],
       spellsKnown: c.spellsKnown.includes(id) ? c.spellsKnown : [...c.spellsKnown, id],
-      spellsPrepared: spellById(id)?.level === 0 ? [...c.spellsPrepared, id] : c.spellsPrepared,
     }))
+
+  /** Tira uma magia da lista. No grimório ela continua registrada no livro. */
+  const despreparar = (id: string) =>
+    updateCharacter(char.id, (c) => ({
+      spellsPrepared: c.spellsPrepared.filter((x) => x !== id),
+      spellsKnown: modo === 'grimorio' ? c.spellsKnown : c.spellsKnown.filter((x) => x !== id),
+    }))
+
+  /** Substitui `de` por `para`, gastando uma troca. */
+  const trocar = (de: string, para: string) => {
+    updateCharacter(char.id, (c) => ({
+      spellsPrepared: [...c.spellsPrepared.filter((x) => x !== de), para],
+      spellsKnown: modo === 'grimorio'
+        ? (c.spellsKnown.includes(para) ? c.spellsKnown : [...c.spellsKnown, para])
+        : [...c.spellsKnown.filter((x) => x !== de), para],
+      spellSwaps: Math.max(0, (c.spellSwaps ?? 0) - 1),
+    }))
+    setTrocando(null)
   }
 
-  const removeSpell = (id: string) => {
+  const toggleTruque = (id: string) =>
     updateCharacter(char.id, (c) => ({
-      spellsKnown: c.spellsKnown.filter((x) => x !== id),
+      spellsKnown: c.spellsKnown.includes(id) ? c.spellsKnown.filter((x) => x !== id) : [...c.spellsKnown, id],
       spellsPrepared: c.spellsPrepared.filter((x) => x !== id),
     }))
-  }
 
-  const catalogo = SPELLS.filter((s) => s.classes.includes(char.classId) && s.level <= maxLvl)
-  const porNivel = (lvl: number) => catalogo.filter((s) => s.level === lvl)
+  const toggleGrimorio = (id: string) =>
+    updateCharacter(char.id, (c) => ({
+      spellsKnown: c.spellsKnown.includes(id) ? c.spellsKnown.filter((x) => x !== id) : [...c.spellsKnown, id],
+      spellsPrepared: c.spellsPrepared.filter((x) => x !== id),
+    }))
+
+  const listasLabel = spellListClasses(char).map((c) => classById(c)?.name ?? c).join(', ')
 
   return (
     <div>
@@ -124,7 +182,7 @@ export function SpellsTab({ char }: { char: Character }) {
           <div className="ability">
             <div className="name">Habilidade</div>
             <div className="mod" style={{ fontSize: '1rem', paddingTop: 8 }}>{ABILITY_NAMES[sc.ability].slice(0, 3)}</div>
-            <div className="score">{sc.mod >= 0 ? `+${sc.mod}` : sc.mod}</div>
+            <div className="score">{fmtMod(sc.mod)}</div>
           </div>
           <div className="ability">
             <div className="name">CD de Magia</div>
@@ -133,9 +191,13 @@ export function SpellsTab({ char }: { char: Character }) {
           </div>
           <div className="ability">
             <div className="name">Ataque</div>
-            <div className="mod">+{sc.attackBonus}</div>
+            <div className="mod">{fmtMod(sc.attackBonus)}</div>
             <div className="score">mágico</div>
           </div>
+        </div>
+        <div className="tiny muted" style={{ marginTop: 10 }}>
+          Lista de magias: <strong className="gold">{listasLabel}</strong>
+          {sc.caster === 'terco' && ' · conjuração concedida pela subclasse'}
         </div>
       </Card>
 
@@ -190,65 +252,216 @@ export function SpellsTab({ char }: { char: Character }) {
         )
       )}
 
-      {cardEspecie}
+      {/* --- Truques --- */}
+      {limiteTruques > 0 && (
+        <Card
+          title={`Truques (${truques.length}/${limiteTruques})`}
+          action={<button className="sm primary" onClick={() => setFolha('truques')}>Escolher</button>}
+        >
+          {truques.length === 0
+            ? <p className="muted tiny">Você ainda não escolheu nenhum truque.</p>
+            : truques.map((s) => (
+              <div className="list-item eq" key={s.id} onClick={() => setDetail(s.id)}>
+                <strong style={{ fontSize: '.92rem' }}>{s.name}</strong>
+                <div className="tiny muted">{resumoMagia(s)}</div>
+              </div>
+            ))}
+          <div className="tiny muted" style={{ marginTop: 8 }}>
+            Truques não gastam espaço de magia. Ao subir de nível você pode trocar um truque por outro.
+          </div>
+        </Card>
+      )}
 
-      <button className="primary" style={{ width: '100%', marginBottom: 12 }} onClick={() => setBrowser(true)}>
-        ＋ Adicionar magia ao repertório
-      </button>
+      {cardAutomaticas}
 
-      {prepLimit !== null && (
-        <div className={`banner${preparadasCount > prepLimit ? ' warn' : ''}`}>
-          Magias preparadas: <strong>{preparadasCount}/{prepLimit}</strong>
-          {' · '}Truques: <strong>{truquesConhecidos.length}/{cantripMax}</strong>
-          {preparadasCount > prepLimit && <div>⚠ Você excedeu o limite de magias preparadas do seu nível.</div>}
+      {/* --- Magias preparadas --- */}
+      <Card
+        title={`Magias Preparadas (${preparadas.length}/${limitePreparadas})`}
+        action={<button className="sm primary" onClick={() => setFolha('preparar')}>Preparar</button>}
+      >
+        <div className="tiny muted" style={{ marginBottom: 10 }}>
+          <strong className="gold">{regra.quando}:</strong> {regra.quantas.toLowerCase()}. {regra.texto}
+          {!trocaLivre && (
+            <div style={{ marginTop: 4 }}>
+              Trocas disponíveis agora: <strong className={trocasDisponiveis > 0 ? 'gold' : ''}>{trocasDisponiveis}</strong>
+              {modo === 'descanso-uma' ? ' (recarrega no descanso longo)' : ' (concedida a cada nível)'}
+            </div>
+          )}
         </div>
-      )}
 
-      {conhecidas.length === 0 && (
-        <Empty icon="📖" title="Nenhuma magia no repertório" hint="Use o botão acima para adicionar truques e magias." />
-      )}
+        {preparadas.length === 0 && (
+          <p className="muted tiny">Nenhuma magia preparada — use o botão <strong>Preparar</strong>.</p>
+        )}
 
-      {ORDINAIS.map((titulo, lvl) => {
-        const lista = conhecidas.filter((s) => s.level === lvl)
-        if (lista.length === 0) return null
-        return (
-          <div key={lvl}>
-            <div className="spell-lvl">{titulo}</div>
-            {lista.map((s) => {
-              const prep = lvl === 0 || preparadas.includes(s.id)
-              return (
-                <div className={`list-item${prep ? ' eq' : ''}`} key={s.id}>
+        {ORDINAIS.map((titulo, lvl) => {
+          if (lvl === 0) return null
+          const lista = preparadas.filter((s) => s.level === lvl).sort((a, b) => a.name.localeCompare(b.name))
+          if (lista.length === 0) return null
+          return (
+            <div key={lvl}>
+              <div className="spell-lvl">{titulo}</div>
+              {lista.map((s) => (
+                <div className="list-item eq" key={s.id}>
                   <div className="spread">
                     <div style={{ flex: 1 }} onClick={() => setDetail(s.id)}>
                       <strong style={{ fontSize: '.92rem' }}>{s.name}</strong>
-                      <div className="tiny muted">
-                        {s.school} · {s.castingTime} · {s.range}
-                        {s.concentration ? ' · Concentração' : ''}{s.ritual ? ' · Ritual' : ''}
-                      </div>
+                      <div className="tiny muted">{resumoMagia(s)}</div>
                     </div>
-                    <div className="row" style={{ gap: 6 }}>
-                      {lvl > 0 && (
-                        <button className={`sm${prep ? ' gold' : ''}`} onClick={() => togglePrepared(s.id)}>
-                          {prep ? '✓ Preparada' : 'Preparar'}
-                        </button>
-                      )}
-                      <button className="sm ghost" onClick={() => removeSpell(s.id)}>🗑</button>
-                    </div>
+                    <button
+                      className="sm ghost"
+                      onClick={() => {
+                        if (trocaLivre) despreparar(s.id)
+                        else { setTrocando(s.id); setFolha('preparar') }
+                      }}
+                      disabled={!trocaLivre && trocasDisponiveis === 0}
+                    >{trocaLivre ? '✕' : '⇄'}</button>
                   </div>
                 </div>
-              )
-            })}
-          </div>
-        )
-      })}
+              ))}
+            </div>
+          )
+        })}
 
-      {browser && (
-        <Sheet title={`Magias de ${cls.name}`} onClose={() => setBrowser(false)}>
-          <p className="muted tiny" style={{ marginBottom: 10 }}>
-            Mostrando magias de até {maxLvl}º nível, o máximo acessível no seu nível atual.
+        {excedente && (
+          <div className="banner warn">
+            ⚠ Você tem {preparadas.length} magias preparadas e o seu limite é {limitePreparadas}.
+            Use o ✕ para tirar as que sobram.
+          </div>
+        )}
+      </Card>
+
+      {/* --- Grimório do Mago --- */}
+      {modo === 'grimorio' && (
+        <Card
+          title={`Grimório (${grimorio.length} magias)`}
+          action={<button className="sm" onClick={() => setFolha('grimorio')}>Estudar</button>}
+        >
+          <p className="muted tiny">
+            Seu grimório guarda todas as magias que você aprendeu; a cada descanso longo você
+            prepara, entre elas, até {limitePreparadas} magias.
           </p>
-          {ORDINAIS.slice(0, maxLvl + 1).map((titulo, lvl) => {
-            const lista = porNivel(lvl)
+          {grimorio.length > 0 && (
+            <div className="tiny muted" style={{ marginTop: 8 }}>
+              {grimorio.map((s) => s.name).join(', ')}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {cardInatas}
+
+      {/* ---------- Folha: preparar magias ---------- */}
+      {folha === 'preparar' && (
+        <Sheet
+          title={trocando ? 'Trocar magia preparada' : 'Preparar magias'}
+          onClose={() => { setFolha(null); setTrocando(null) }}
+        >
+          <div className="banner">
+            <strong className="gold">{regra.quando}:</strong> {regra.quantas.toLowerCase()}.
+            <div className="tiny" style={{ marginTop: 4 }}>{regra.texto}</div>
+          </div>
+
+          {trocando && (
+            <div className="banner warn">
+              Substituindo <strong>{spellById(trocando)?.name}</strong> — escolha a magia que entra no lugar.
+              <button className="sm" style={{ marginTop: 8 }} onClick={() => setTrocando(null)}>Cancelar troca</button>
+            </div>
+          )}
+
+          <div className="tiny muted" style={{ margin: '4px 0 10px' }}>
+            Preparadas: <strong>{preparadas.length}/{limitePreparadas}</strong>
+            {!trocando && vagasLivres > 0 && ` · ${vagasLivres} vaga(s) livre(s)`}
+            {!trocaLivre && !trocando && vagasLivres <= 0 && trocasDisponiveis > 0
+              && ' · a lista está cheia: use ⇄ numa magia preparada para trocá-la'}
+          </div>
+
+          {candidatas.length === 0 && (
+            <p className="muted tiny">
+              {modo === 'grimorio'
+                ? 'Seu grimório ainda não tem magias — use "Estudar" para adicioná-las.'
+                : 'Nenhuma magia disponível no seu nível.'}
+            </p>
+          )}
+
+          {ORDINAIS.map((titulo, lvl) => {
+            if (lvl === 0) return null
+            const lista = candidatas.filter((s) => s.level === lvl)
+            if (!lista.length) return null
+            return (
+              <details key={lvl} open={lvl <= 1}>
+                <summary>{titulo} ({lista.length})</summary>
+                <div style={{ marginTop: 8 }}>
+                  {lista.map((s) => {
+                    const prep = preparadasIds.includes(s.id)
+                    // Sem troca em curso, só dá para preencher vagas livres.
+                    const podeEntrar = trocando ? !prep : !prep && vagasLivres > 0
+                    return (
+                      <div className={`list-item${prep ? ' eq' : ''}`} key={s.id}>
+                        <div className="spread">
+                          <div style={{ flex: 1 }} onClick={() => setDetail(s.id)}>
+                            <strong style={{ fontSize: '.9rem' }}>{s.name}</strong>
+                            <div className="tiny muted">{resumoMagia(s)}</div>
+                          </div>
+                          {prep ? (
+                            trocaLivre
+                              ? <button className="sm gold" onClick={() => despreparar(s.id)}>✓ Preparada</button>
+                              : <span className="tiny gold">✓ Preparada</span>
+                          ) : (
+                            <button
+                              className="sm primary"
+                              disabled={!podeEntrar}
+                              onClick={() => (trocando ? trocar(trocando, s.id) : preparar(s.id))}
+                            >{trocando ? 'Trocar' : '＋'}</button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </details>
+            )
+          })}
+        </Sheet>
+      )}
+
+      {/* ---------- Folha: truques ---------- */}
+      {folha === 'truques' && (
+        <Sheet title={`Truques (${truques.length}/${limiteTruques})`} onClose={() => setFolha(null)}>
+          <p className="muted tiny" style={{ marginBottom: 10 }}>
+            Escolha {limiteTruques} truque(s) da lista de {listasLabel}. Sempre que ganhar um nível
+            nesta classe você pode substituir um truque por outro.
+          </p>
+          {truquesCandidatos.map((s) => {
+            const tem = truquesIds.includes(s.id)
+            return (
+              <div className={`list-item${tem ? ' eq' : ''}`} key={s.id}>
+                <div className="spread">
+                  <div style={{ flex: 1 }} onClick={() => setDetail(s.id)}>
+                    <strong style={{ fontSize: '.9rem' }}>{s.name}</strong>
+                    <div className="tiny muted">{resumoMagia(s)}</div>
+                  </div>
+                  <button
+                    className={`sm${tem ? ' gold' : ' primary'}`}
+                    disabled={!tem && truques.length >= limiteTruques}
+                    onClick={() => toggleTruque(s.id)}
+                  >{tem ? '✓' : '＋'}</button>
+                </div>
+              </div>
+            )
+          })}
+        </Sheet>
+      )}
+
+      {/* ---------- Folha: grimório ---------- */}
+      {folha === 'grimorio' && (
+        <Sheet title="Grimório" onClose={() => setFolha(null)}>
+          <p className="muted tiny" style={{ marginBottom: 10 }}>
+            Você começa com 6 magias e adiciona 2 a cada nível de Mago, além das que copiar de
+            pergaminhos e grimórios encontrados na aventura. Não há limite de tamanho.
+          </p>
+          {ORDINAIS.map((titulo, lvl) => {
+            if (lvl === 0) return null
+            const lista = catalogo.filter((s) => s.level === lvl)
             if (!lista.length) return null
             return (
               <details key={lvl} open={lvl <= 1}>
@@ -257,13 +470,13 @@ export function SpellsTab({ char }: { char: Character }) {
                   {lista.map((s) => {
                     const tem = char.spellsKnown.includes(s.id)
                     return (
-                      <div className="list-item" key={s.id}>
+                      <div className={`list-item${tem ? ' eq' : ''}`} key={s.id}>
                         <div className="spread">
                           <div style={{ flex: 1 }} onClick={() => setDetail(s.id)}>
                             <strong style={{ fontSize: '.9rem' }}>{s.name}</strong>
-                            <div className="tiny muted">{s.school} · {s.castingTime} · {s.range}</div>
+                            <div className="tiny muted">{resumoMagia(s)}</div>
                           </div>
-                          <button className={`sm${tem ? '' : ' primary'}`} disabled={tem} onClick={() => addSpell(s.id)}>
+                          <button className={`sm${tem ? ' gold' : ' primary'}`} onClick={() => toggleGrimorio(s.id)}>
                             {tem ? '✓' : '＋'}
                           </button>
                         </div>
@@ -277,19 +490,13 @@ export function SpellsTab({ char }: { char: Character }) {
         </Sheet>
       )}
 
-      {detail && (
-        <DetalheMagia
-          id={detail}
-          onClose={() => setDetail(null)}
-          onAdd={char.spellsKnown.includes(detail) ? undefined : () => { addSpell(detail); setDetail(null) }}
-        />
-      )}
+      {detail && <DetalheMagia id={detail} onClose={() => setDetail(null)} />}
     </div>
   )
 }
 
 /** Folha com a descrição completa de uma magia, usada nas duas variações da aba. */
-function DetalheMagia({ id, onClose, onAdd }: { id: string; onClose: () => void; onAdd?: () => void }) {
+function DetalheMagia({ id, onClose }: { id: string; onClose: () => void }) {
   const s = spellById(id)
   if (!s) return null
   return (
@@ -305,11 +512,6 @@ function DetalheMagia({ id, onClose, onAdd }: { id: string; onClose: () => void;
       </div>
       <SpellText desc={s.desc} />
       <div className="tiny muted" style={{ marginTop: 10 }}>Classes: {s.classes.map((c) => classById(c)?.name ?? c).join(', ')}</div>
-      {onAdd && (
-        <button className="primary" style={{ width: '100%', marginTop: 12 }} onClick={onAdd}>
-          Adicionar ao repertório
-        </button>
-      )}
     </Sheet>
   )
 }

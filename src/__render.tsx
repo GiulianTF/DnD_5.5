@@ -102,6 +102,45 @@ tenta('LevelUpWizard (mago nv12)', () => renderToString(<LevelUpWizard char={mag
 tenta('SpellsTab (bruxo - pacto)', () => renderToString(<SpellsTab char={bruxo} />))
 tenta('LevelUpWizard (bruxo nv8)', () => renderToString(<LevelUpWizard char={bruxo} onClose={() => {}} />))
 
+// Clerigo com dominio: as magias de dominio precisam aparecer na aba de Magias
+const clerigo: Character = newCharacter({
+  name: 'Sera', classId: 'clerigo', speciesId: 'humano', backgroundId: 'acolito', level: 7,
+  subclassId: 'vida', classChoices: { 'ordem-divina': 'protetor' },
+  hpRolls: Array(6).fill(null),
+  spellsKnown: ['chama-sagrada', 'orientacao', 'luz', 'comando', 'escudo-da-fe'],
+  spellsPrepared: ['comando', 'escudo-da-fe'],
+  inventory: [{ uid: '1', itemId: 'cota-de-malha', qty: 1, equipped: true }],
+})
+tenta('SpellsTab (clerigo nv7: magias de dominio)', () => renderToString(<SpellsTab char={clerigo} />))
+tenta('ItemsTab (clerigo protetor com cota de malha)', () => renderToString(<ItemsTab char={clerigo} />))
+tenta('SkillsTab (clerigo protetor)', () => renderToString(<SkillsTab char={clerigo} />))
+tenta('LevelUpWizard (clerigo nv8)', () => renderToString(<LevelUpWizard char={clerigo} onClose={() => {}} />))
+
+// Druida da Terra: as magias vem do terreno escolhido
+const druida: Character = newCharacter({
+  name: 'Faun', classId: 'druida', level: 5, subclassId: 'terra',
+  classChoices: { 'ordem-primal': 'mago-primal', 'terreno-druidico': 'tropical' },
+  hpRolls: Array(4).fill(null),
+})
+tenta('SpellsTab (druida do Circulo da Terra)', () => renderToString(<SpellsTab char={druida} />))
+tenta('CharacterSheet (druida: escolha de terreno)', () => renderToString(<CharacterSheet char={druida} onBack={() => {}} />))
+
+// Subclasses que concedem conjuracao (1/3 de conjurador)
+const cavaleiro: Character = newCharacter({
+  name: 'Ivor', classId: 'guerreiro', level: 8, subclassId: 'cavaleiro-arcano',
+  classChoices: { 'estilo-de-luta': 'estilo-defesa' },
+  hpRolls: Array(7).fill(null),
+  spellsKnown: ['raio-de-gelo', 'toque-chocante', 'escudo-arcano', 'misseis-magicos'],
+  spellsPrepared: ['escudo-arcano', 'misseis-magicos'],
+})
+const trapaceiro: Character = newCharacter({
+  name: 'Fio', classId: 'ladino', level: 9, subclassId: 'trapaceiro-arcano',
+  hpRolls: Array(8).fill(null),
+})
+tenta('SpellsTab (cavaleiro mistico nv8)', () => renderToString(<SpellsTab char={cavaleiro} />))
+tenta('LevelUpWizard (cavaleiro mistico nv9)', () => renderToString(<LevelUpWizard char={cavaleiro} onClose={() => {}} />))
+tenta('SpellsTab (trapaceiro arcano nv9)', () => renderToString(<SpellsTab char={trapaceiro} />))
+
 console.log('\n== Escolhas de especie e de classe ==')
 // Golias/draconato com escolha pendente e com escolha feita; humano com talento extra
 const goliasPendente: Character = newCharacter({
@@ -146,7 +185,8 @@ for (const c of CLASSES) {
   for (let lv = 1; lv <= 20; lv++) {
     const ch: Character = newCharacter({
       classId: c.id, level: lv,
-      subclassId: lv >= 3 ? c.subclasses[0].id : undefined,
+      // Alterna entre todas as subclasses ao longo dos niveis para cobrir todas elas.
+      subclassId: lv >= 3 ? c.subclasses[lv % c.subclasses.length].id : undefined,
       hpRolls: Array(Math.max(0, lv - 1)).fill(null),
       spellsKnown: SPELLS.filter((s) => s.classes.includes(c.id)).slice(0, 8).map((s) => s.id),
       spellsPrepared: SPELLS.filter((s) => s.classes.includes(c.id)).slice(0, 8).map((s) => s.id),
