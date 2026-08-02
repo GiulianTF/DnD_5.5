@@ -4,7 +4,7 @@ import type { AbilityScores, Character, RollEntry } from '../types'
 import { emptyScores } from '../engine/pointbuy'
 import { emptyPurse, purseFromGold } from '../engine/money'
 import { classById } from '../data/classes'
-import { rollHitDie } from '../engine/dice'
+import { roll, rollHitDie } from '../engine/dice'
 import { uid } from '../engine/uid'
 import { abilityMods, characterResources, maxHp, pactSlots, preparationMode } from '../engine/rules'
 
@@ -27,6 +27,7 @@ export const newCharacter = (partial: Partial<Character> = {}): Character => ({
   weaponMasteries: [],
   damageTaken: 0,
   tempHp: 0,
+  deathSaves: { successes: 0, failures: 0 },
   hpRolls: [],
   hitDiceSpent: 0,
   inventory: [],
@@ -70,6 +71,7 @@ export const normalizeCharacter = (c: Character): Character => ({
   slotsSpent: c.slotsSpent ?? {},
   resourcesUsed: c.resourcesUsed ?? {},
   backgroundBonuses: c.backgroundBonuses ?? {},
+  deathSaves: c.deathSaves ?? { successes: 0, failures: 0 },
   // Fichas antigas guardavam só o ouro; viram uma bolsa completa de moedas.
   coins: c.coins ?? purseFromGold(c.gold ?? 0),
 })
@@ -101,6 +103,9 @@ interface AppState {
   applyDamage: (id: string, amount: number) => void
   heal: (id: string, amount: number) => void
   setTempHp: (id: string, amount: number) => void
+  setDeathSaves: (id: string, saves: Character['deathSaves']) => void
+  /** Rola 1d20 de Teste de Morte e aplica o resultado (regras do PHB 2024). */
+  rollDeathSave: (id: string) => RollEntry | null
   shortRest: (id: string) => void
   longRest: (id: string) => void
   /** `die` permite escolher o Dado de Vida numa ficha multiclasse (d10, d8...) */
@@ -165,13 +170,48 @@ export const useStore = create<AppState>()(
             temp -= absorbed
             remaining -= absorbed
           }
-          return { tempHp: temp, damageTaken: Math.min(maxHp(c), c.damageTaken + remaining) }
+          // Dano sofrido enquanto já está a 0 PV conta como uma falha no Teste de Morte.
+          const jaCaido = c.damageTaken >= maxHp(c)
+          const deathSaves = jaCaido && remaining > 0
+            ? { ...c.deathSaves, failures: Math.min(3, c.deathSaves.failures + 1) }
+            : c.deathSaves
+          return { tempHp: temp, damageTaken: Math.min(maxHp(c), c.damageTaken + remaining), deathSaves }
         }),
 
       heal: (id, amount) =>
-        get().updateCharacter(id, (c) => ({ damageTaken: Math.max(0, c.damageTaken - amount) })),
+        get().updateCharacter(id, (c) => ({
+          damageTaken: Math.max(0, c.damageTaken - amount),
+          // Recuperar PV encerra os Testes de Morte: os marcadores zeram.
+          deathSaves: amount > 0 ? { successes: 0, failures: 0 } : c.deathSaves,
+        })),
 
       setTempHp: (id, amount) => get().updateCharacter(id, { tempHp: Math.max(0, amount) }),
+
+      setDeathSaves: (id, saves) =>
+        get().updateCharacter(id, {
+          deathSaves: {
+            successes: Math.max(0, Math.min(3, saves.successes)),
+            failures: Math.max(0, Math.min(3, saves.failures)),
+          },
+        }),
+
+      rollDeathSave: (id) => {
+        const char = get().characters.find((c) => c.id === id)
+        if (!char) return null
+        const entry = roll({ label: 'Teste de Morte', sides: 20, isD20Test: true })
+        get().pushRoll(entry)
+        const dado = entry.rolls[0]
+        get().updateCharacter(id, (c) => {
+          // 20 natural: recupera 1 PV e volta à consciência (zera os marcadores).
+          if (dado === 20) return { damageTaken: maxHp(c) - 1, deathSaves: { successes: 0, failures: 0 } }
+          const ds = { ...c.deathSaves }
+          if (dado === 1) ds.failures = Math.min(3, ds.failures + 2) // 1 natural: duas falhas
+          else if (dado >= 10) ds.successes = Math.min(3, ds.successes + 1)
+          else ds.failures = Math.min(3, ds.failures + 1)
+          return { deathSaves: ds }
+        })
+        return entry
+      },
 
       shortRest: (id) =>
         get().updateCharacter(id, (c) => {
@@ -198,6 +238,7 @@ export const useStore = create<AppState>()(
           return {
             damageTaken: 0,
             tempHp: 0,
+            deathSaves: { successes: 0, failures: 0 },
             slotsSpent: {},
             pactSlotsSpent: 0,
             resourcesUsed: used,

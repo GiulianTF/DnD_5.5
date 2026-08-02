@@ -45,11 +45,11 @@ const DADIVA_DE_GIGANTE: OptionGroup = {
   name: 'Ancestral Gigante (Dádiva)',
   desc: 'Escolha a dádiva do seu ancestral gigante. Usos = bônus de proficiência por descanso longo.',
   options: [
-    { id: 'nuvem', name: 'Dádiva da Nuvem', desc: 'Reação, quando você ou uma criatura a até 9 m for alvo de um ataque: troque de lugar com outra criatura disposta a até 9 m e o ataque passa a mirá-la.' },
-    { id: 'fogo', name: 'Dádiva do Fogo', desc: 'Ao acertar um ataque com arma ou desarmado, cause 1d10 de dano de fogo extra.' },
-    { id: 'gelo', name: 'Dádiva do Gelo', desc: 'Como ação Bônus, ganhe PV temporários iguais a 1d12 + seu bônus de proficiência.' },
-    { id: 'colina', name: 'Dádiva da Colina', desc: 'Ao acertar um ataque, force uma criatura Grande ou menor a fazer SG de FOR (CD 8 + mod. CON + prof.) ou ficar Caída.' },
-    { id: 'pedra', name: 'Dádiva da Pedra', desc: 'Reação, quando sofrer dano: reduza o dano em 1d12 + seu bônus de proficiência.' },
+    { id: 'nuvem', name: 'Dádiva da Nuvem', desc: 'Como ação Bônus, teleporte-se magicamente até 9 m para um espaço desocupado que você possa ver.' },
+    { id: 'fogo', name: 'Dádiva do Fogo', desc: 'Ao acertar um ataque e causar dano ao alvo, cause também 1d10 de dano de fogo a ele.' },
+    { id: 'gelo', name: 'Dádiva do Gelo', desc: 'Ao acertar um ataque e causar dano ao alvo, cause também 1d6 de dano de frio a ele e reduza o deslocamento dele em 3 m até o início do seu próximo turno.' },
+    { id: 'colina', name: 'Dádiva da Colina', desc: 'Ao acertar um ataque e causar dano a uma criatura Grande ou menor, você pode deixá-la com a condição Caída.' },
+    { id: 'pedra', name: 'Dádiva da Pedra', desc: 'Reação, quando sofrer dano: role 1d12, some seu modificador de Constituição e reduza o dano nesse total.' },
     { id: 'tempestade', name: 'Dádiva da Tempestade', desc: 'Reação, quando uma criatura a até 18 m te causar dano: cause 1d8 de dano de trovão nela.' },
   ],
 }
@@ -170,8 +170,8 @@ const REVELACAO_CELESTIAL: OptionGroup = {
   level: 3,
   desc: 'A partir do nível 3, escolha a forma que você assume ao se transformar (ação Bônus, 1 minuto, 1×/descanso longo).',
   options: [
-    { id: 'ceifador', name: 'Ceifador Necrótico', desc: 'Asas espectrais de sombra: criaturas a até 3 m de você (exceto você) ficam Amedrontadas até o fim do seu próximo turno. Dano extra necrótico igual ao bônus de proficiência, 1×/turno.' },
-    { id: 'chamas', name: 'Chamas Interiores', desc: 'Uma aura flamejante: criaturas hostis que terminarem o turno a até 3 m sofrem dano radiante igual ao bônus de proficiência. Dano extra radiante 1×/turno.' },
+    { id: 'ceifador', name: 'Ceifador Necrótico', desc: 'Asas espectrais de sombra: ao se transformar, as criaturas que não sejam suas aliadas a até 3 m de você e que possam ver você fazem SG de CAR (CD 8 + mod. CAR + prof.) ou ficam Amedrontadas até o fim do seu próximo turno. Dano extra necrótico igual ao bônus de proficiência, 1×/turno.' },
+    { id: 'chamas', name: 'Chamas Interiores', desc: 'Luz abrasadora: você emite luz plena num raio de 3 m e, no fim de cada um dos SEUS turnos, cada criatura a até 3 m de você sofre dano radiante igual ao seu bônus de proficiência. Dano extra radiante 1×/turno.' },
     { id: 'asas', name: 'Asas Radiantes', desc: 'Ganhe deslocamento de voo igual ao seu deslocamento. Dano extra radiante igual ao bônus de proficiência, 1×/turno.' },
   ],
 }
@@ -185,9 +185,9 @@ export const SPECIES: Species[] = [
     darkvision: 18,
     traits: [
       { name: 'Portador Celestial', desc: 'Resistência a dano necrótico e radiante.' },
-      { name: 'Mãos Curativas', desc: 'Como ação de Magia, cure uma criatura tocada em 1d4 × bônus de proficiência PV. Recupera em descanso longo.' },
+      { name: 'Mãos Curativas', desc: 'Como ação de Magia, toque uma criatura e role um número de d4 igual ao seu bônus de proficiência: ela recupera PV igual ao total. Recupera em descanso longo.' },
       { name: 'Portador da Luz', desc: 'Você conhece o truque Luz. Carisma é sua habilidade de conjuração para ele.' },
-      { name: 'Revelação Celestial', desc: 'A partir do nível 3, transforme-se (Bônus): Ceifador Necrótico, Chamas Interiores ou Asas Radiantes. Extra 1×/descanso longo: dano extra igual ao bônus de proficiência 1×/turno.' },
+      { name: 'Revelação Celestial', desc: 'A partir do nível 3, como ação Bônus, transforme-se por 1 minuto ou até encerrar (1×/descanso longo): Ceifador Necrótico, Chamas Interiores ou Asas Radiantes. Durante a transformação, 1×/turno, cause dano extra igual ao seu bônus de proficiência (necrótico ou radiante, conforme a forma) quando causar dano com um ataque ou magia.' },
     ],
     innateSpells: [magia('luz', 1, 'vontade', ['car'])],
     choices: [REVELACAO_CELESTIAL],
@@ -200,7 +200,7 @@ export const SPECIES: Species[] = [
     darkvision: 18,
     traits: [
       { name: 'Ancestral Dracônico', desc: 'Escolha um tipo de dragão; define o dano do sopro e da resistência (Ácido, Elétrico, Fogo, Frio ou Veneno).' },
-      { name: 'Sopro Dracônico', desc: 'Substitua um ataque por um sopro: cone de 4,5 m ou linha de 9 m, SG DES (CD 8 + mod. CON + prof.), 1d10 de dano (aumenta nos níveis 5/11/17). Usos = bônus de proficiência por descanso longo.' },
+      { name: 'Sopro Dracônico', desc: 'Substitua um ataque por um sopro: cone de 4,5 m ou linha de 9 m, SG DES (CD 8 + mod. CON + prof.), 1d10 de dano (metade em caso de sucesso; aumenta nos níveis 5/11/17). Usos = bônus de proficiência por descanso longo.' },
       { name: 'Resistência a Dano', desc: 'Resistência ao tipo de dano do seu ancestral.' },
       { name: 'Voo Dracônico', desc: 'No nível 5, como ação Bônus, ganhe voo (velocidade igual à de deslocamento) por 10 minutos, 1×/descanso longo.' },
     ],
@@ -250,7 +250,7 @@ export const SPECIES: Species[] = [
     size: 'Médio',
     speed: 10.5,
     traits: [
-      { name: 'Ancestral Gigante', desc: 'Escolha uma dádiva (usos = bônus de proficiência/descanso longo): Nuvem (teleporte 9 m), Fogo (1d10 fogo extra), Gelo (reduz deslocamento), Colina (derrubar Grande ou menor), Pedra (reação: reduz dano 1d12 + prof.) ou Tempestade (reação: 1d8 trovão no atacante).' },
+      { name: 'Ancestral Gigante', desc: 'Escolha uma dádiva (usos = bônus de proficiência/descanso longo): Nuvem (teleporte 9 m), Fogo (1d10 fogo extra), Gelo (1d6 frio e reduz deslocamento), Colina (derrubar Grande ou menor), Pedra (reação: reduz dano em 1d12 + mod. CON) ou Tempestade (reação: 1d8 trovão no atacante).' },
       { name: 'Forma de Gigante', desc: 'No nível 5, como ação Bônus, fique Grande por 10 minutos: vantagem em testes de FOR e +3 m de deslocamento. 1×/descanso longo.' },
       { name: 'Feito de Pedra', desc: 'Vantagem em testes para terminar a condição Agarrado.' },
     ],
@@ -288,7 +288,7 @@ export const SPECIES: Species[] = [
     speed: 9,
     darkvision: 36,
     traits: [
-      { name: 'Investida Adrenalizada', desc: 'Quando usar a ação Correr, ganhe PV temporário igual ao bônus de proficiência.' },
+      { name: 'Investida Adrenalizada', desc: 'Você pode usar a ação Correr como ação Bônus; ao fazê-lo, ganhe PV temporários iguais ao seu bônus de proficiência. Usos = bônus de proficiência; recupera em descanso curto ou longo.' },
       { name: 'Resistência Implacável', desc: 'Quando cair a 0 PV, caia para 1 PV em vez disso. 1×/descanso longo.' },
     ],
   },

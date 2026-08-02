@@ -561,6 +561,8 @@ export interface Character {
   /** PV: dano sofrido (max é derivado) e PV temporário */
   damageTaken: number
   tempHp: number
+  /** Testes de Morte marcados enquanto o personagem está a 0 PV */
+  deathSaves: { successes: number; failures: number }
   /** rolagens de PV por nível (índice 0 = nível 2). null = média */
   hpRolls: (number | null)[]
   hitDiceSpent: number
