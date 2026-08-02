@@ -86,6 +86,26 @@ export function rollDamage(label: string, dice: string, modifier: number, damage
   }
 }
 
+/**
+ * Rola uma expressão "NdM" avulsa — o efeito de uma magia ou de um item, que
+ * nem sempre é dano (pode ser cura, duração ou número de alvos). Por isso não
+ * leva tipo de dano nem crítico: é o dado que o texto do livro pediu.
+ */
+export function rollExpression(label: string, dice: string): RollEntry {
+  const rolls = rollDamageDice(dice)
+  const total = rolls.reduce((a, b) => a + b, 0)
+  return {
+    id: uid(),
+    label,
+    formula: dice,
+    rolls,
+    modifier: 0,
+    total,
+    crit: null,
+    time: Date.now(),
+  }
+}
+
 /** 4d6 descartando o menor — para o método de atributos rolados. */
 export function roll4d6DropLowest(): { total: number; dice: number[] } {
   const dice = [rnd(6), rnd(6), rnd(6), rnd(6)].sort((a, b) => b - a)

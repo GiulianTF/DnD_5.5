@@ -148,18 +148,6 @@ export function SwipeTabs<T extends string>({ tabs, value, onChange, children, t
         ))}
       </div>
 
-      {/* Atalho visível para os vizinhos — no celular ensina o gesto, no
-          computador é o próprio botão de navegar. */}
-      <div className="tab-nav">
-        <button className="ghost" disabled={!anterior} onClick={() => irPara(indice - 1)}>
-          {anterior ? `‹ ${anterior.label}` : ''}
-        </button>
-        <span className="tiny muted" aria-hidden="true">⇄ arraste ou use ← →</span>
-        <button className="ghost" disabled={!proxima} onClick={() => irPara(indice + 1)}>
-          {proxima ? `${proxima.label} ›` : ''}
-        </button>
-      </div>
-
       <div
         ref={painel}
         className="tab-panel"

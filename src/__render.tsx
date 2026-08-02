@@ -129,16 +129,13 @@ tenta('ItemsTab', () => renderToString(<ItemsTab char={guerreiro} />))
 tenta('SpellsTab (nao conjurador)', () => renderToString(<SpellsTab char={guerreiro} />))
 tenta('LevelUpWizard nv13', () => renderToString(<LevelUpWizard char={guerreiro} onClose={() => {}} />))
 
-// Abas com navegacao lateral: papeis de acessibilidade e atalho para as vizinhas.
+// Abas com navegacao lateral: papeis de acessibilidade, sem a barra de vizinhas.
 exige('CharacterSheet (abas navegaveis)',
   () => renderToString(<CharacterSheet char={guerreiro} onBack={() => {}} />),
   ['role="tablist"', 'role="tab"', 'role="tabpanel"', 'aria-selected="true"', 'aria-controls="painel-ficha"',
-    'Perícias ›',       // a aba seguinte fica a um clique (e a um arrasto)
-    'tab-panel'])
-// A ficha abre na primeira aba, entao nao ha vizinha a esquerda para oferecer.
-exige('CharacterSheet (primeira aba nao oferece anterior)',
-  () => renderToString(<CharacterSheet char={guerreiro} onBack={() => {}} />),
-  ['disabled'], ['‹ '])
+    'tab-panel'],
+  // A linha de vizinhas e o simbolo de setas sairam da tela.
+  ['tab-nav', '⇄ arraste', '‹ ', ' ›'])
 
 console.log('\n== Conjuradores ==')
 tenta('SpellsTab (mago nv11)', () => renderToString(<SpellsTab char={mago} />))
@@ -242,6 +239,11 @@ exige('SpellsTab (lista unica: classe + dominio + talento)',
   ],
   // A separacao por cartoes de origem sumiu: tudo vive na lista unica.
   ['Magias de Espécie e Talentos', 'Magias Sempre Preparadas'])
+
+// Conjurar e circulos retrateis.
+exige('SpellsTab (conjurar e circulos retrateis)',
+  () => renderToString(<SpellsTab char={clerigoIniciado} />),
+  ['✨ Conjurar', 'spell-lvl-toggle', 'aria-expanded="true"', 'Fechar tudo'])
 
 // A mesma magia vinda do dominio E do talento aparece uma unica vez.
 const clerigoBencaoDupla: Character = {

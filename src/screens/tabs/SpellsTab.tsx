@@ -9,8 +9,11 @@ import {
   innateUsesLabel, knownCantripIds, pactSlots, preparableSpells, preparationMode, preparedLimit,
   preparedSpellIds, spellListClasses, spellSlots, spellcasting,
 } from '../../engine/rules'
+import { circulosDisponiveis, dadosDaMagia } from '../../engine/uso'
+import { rollExpression } from '../../engine/dice'
 import { useStore } from '../../store/store'
 import { Card, Empty, Sheet, SpellText } from '../../components/ui'
+import { ConfirmarUso, type OpcaoDeCusto } from '../../components/ConfirmarUso'
 
 const ORDINAIS = ['Truques', '1º Nível', '2º Nível', '3º Nível', '4º Nível', '5º Nível', '6º Nível', '7º Nível', '8º Nível', '9º Nível']
 
@@ -43,13 +46,49 @@ interface LinhaMagia {
 
 const ordenar = (a: LinhaMagia, b: LinhaMagia) => a.spell.name.localeCompare(b.spell.name)
 
+/**
+ * Cabeçalho de círculo que abre e fecha. Cada círculo guarda o próprio estado:
+ * abrir o 3º não fecha o 1º, então dá para deixar vários abertos ao mesmo tempo
+ * e recolher só os que estão atrapalhando a leitura.
+ */
+function SecaoCirculo({ titulo, quantas, aberta, onAlternar, children }: {
+  titulo: string
+  quantas: number
+  aberta: boolean
+  onAlternar: () => void
+  children: ReactNode
+}) {
+  return (
+    <div>
+      <button className="spell-lvl-toggle" onClick={onAlternar} aria-expanded={aberta}>
+        <span className="seta" aria-hidden="true">{aberta ? '▾' : '▸'}</span>
+        <span className="spell-lvl">{titulo}</span>
+        <span className="tiny muted">{quantas}</span>
+      </button>
+      {aberta && children}
+    </div>
+  )
+}
+
 export function SpellsTab({ char }: { char: Character }) {
-  const { updateCharacter, spendSlot, spendPactSlot, useResource } = useStore()
+  const { updateCharacter, spendSlot, spendPactSlot, useResource, pushRoll } = useStore()
   const [detail, setDetail] = useState<string | null>(null)
   /** folha aberta: preparação de magias, escolha de truques ou grimório */
   const [folha, setFolha] = useState<'preparar' | 'truques' | 'grimorio' | null>(null)
   /** id da magia que está sendo substituída numa troca */
   const [trocando, setTrocando] = useState<string | null>(null)
+  /** magia esperando a confirmação de conjuração */
+  const [conjurando, setConjurando] = useState<LinhaMagia | null>(null)
+  /** círculos recolhidos pelo jogador — os demais ficam abertos */
+  const [recolhidos, setRecolhidos] = useState<Set<number>>(new Set())
+
+  const alternarCirculo = (lvl: number) =>
+    setRecolhidos((s) => {
+      const nova = new Set(s)
+      if (nova.has(lvl)) nova.delete(lvl)
+      else nova.add(lvl)
+      return nova
+    })
 
   const cls = classById(char.classId)
   const sc = spellcasting(char)
@@ -90,6 +129,45 @@ export function SpellsTab({ char }: { char: Character }) {
 
   const usosGastos = (spellId: string) => char.resourcesUsed[innateSpellResourceId(spellId)] ?? 0
 
+  /**
+   * Como esta magia pode ser paga. A ordem importa: o uso gratuito vem primeiro
+   * porque é o mais barato, depois o Espaço de Pacto e por fim os círculos
+   * normais, do menor para o maior — conjurar num espaço maior é permitido, mas
+   * só faz sentido quando o jogador escolhe.
+   */
+  const custosDaMagia = (l: LinhaMagia): OpcaoDeCusto[] => {
+    if (l.spell.level === 0) return []
+    const out: OpcaoDeCusto[] = []
+
+    const gratis = l.origem === 'inata' ? innateFreeUses(char, l.freeUses) : 0
+    if (gratis > 0) {
+      const restam = gratis - Math.min(gratis, usosGastos(l.spell.id))
+      if (restam > 0) out.push({ id: 'inata', label: 'Uso gratuito', restantes: restam })
+    }
+    if (pact && l.spell.level <= pact.level && pact.count - char.pactSlotsSpent > 0) {
+      out.push({
+        id: 'pacto',
+        label: `Espaço de Pacto (${pact.level}º)`,
+        restantes: pact.count - char.pactSlotsSpent,
+      })
+    }
+    for (const lvl of circulosDisponiveis(l.spell.level, slots, char.slotsSpent)) {
+      out.push({ id: `slot-${lvl}`, label: `${lvl}º nível`, restantes: (slots[lvl - 1] ?? 0) - (char.slotsSpent[lvl] ?? 0) })
+    }
+    return out
+  }
+
+  /** Marca o gasto da conjuração e, se pedirem, rola o dado que o texto indica. */
+  const conjurar = (l: LinhaMagia, rolar: boolean, custoId?: string) => {
+    if (custoId === 'inata') gastarUsoInato(l.spell.id, 1)
+    else if (custoId === 'pacto') spendPactSlot(char.id, 1)
+    else if (custoId?.startsWith('slot-')) spendSlot(char.id, Number(custoId.slice(5)), 1)
+
+    const dados = dadosDaMagia(l.spell)
+    if (rolar && dados) pushRoll(rollExpression(l.spell.name, dados))
+    setConjurando(null)
+  }
+
   /** Uma linha da lista, no formato único usado por todas as origens. */
   const renderLinha = (l: LinhaMagia, acao?: ReactNode) => {
     const usosGratis = l.origem === 'inata' ? innateFreeUses(char, l.freeUses) : 0
@@ -98,7 +176,7 @@ export function SpellsTab({ char }: { char: Character }) {
     return (
       <div className="list-item eq" key={l.spell.id}>
         <div className="spread">
-          <div style={{ flex: 1 }} onClick={() => setDetail(l.spell.id)}>
+          <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => setDetail(l.spell.id)}>
             <strong style={{ fontSize: '.92rem' }}>{l.spell.name}</strong>
             {l.origem !== 'classe' && (
               <span className="tiny gold" style={{ marginLeft: 6 }}>
@@ -116,7 +194,10 @@ export function SpellsTab({ char }: { char: Character }) {
             )}
             {l.nota && <div className="tiny muted">{l.nota}</div>}
           </div>
-          {acao}
+          <div className="row" style={{ gap: 6, alignItems: 'flex-start' }}>
+            <button className="sm primary" onClick={() => setConjurando(l)}>✨ Conjurar</button>
+            {acao}
+          </div>
         </div>
         {usosGratis > 0 && (
           <div className="spread" style={{ marginTop: 6 }}>
@@ -185,15 +266,30 @@ export function SpellsTab({ char }: { char: Character }) {
               const lista = comCirculo.filter((l) => l.spell.level === lvl).sort(ordenar)
               if (lista.length === 0) return null
               return (
-                <div key={lvl}>
-                  <div className="spell-lvl">{titulo}</div>
+                <SecaoCirculo
+                  key={lvl} titulo={titulo} quantas={lista.length}
+                  aberta={!recolhidos.has(lvl)} onAlternar={() => alternarCirculo(lvl)}
+                >
                   {lista.map((l) => renderLinha(l))}
-                </div>
+                </SecaoCirculo>
               )
             })}
           </Card>
         )}
         {detail && <DetalheMagia id={detail} onClose={() => setDetail(null)} />}
+        {conjurando && (
+          <ConfirmarUso
+            titulo={conjurando.spell.name}
+            subtitulo={resumoMagia(conjurando.spell)}
+            dados={dadosDaMagia(conjurando.spell)}
+            custos={custosDaMagia(conjurando)}
+            aviso={conjurando.spell.level > 0 && custosDaMagia(conjurando).length === 0
+              ? 'Você não tem espaços de magia nem usos gratuitos para esta magia.'
+              : undefined}
+            onUsar={(rolar, custoId) => conjurar(conjurando, rolar, custoId)}
+            onFechar={() => setConjurando(null)}
+          />
+        )}
       </div>
     )
   }
@@ -237,6 +333,8 @@ export function SpellsTab({ char }: { char: Character }) {
     ...preparadas.filter((s) => !idsConcedidos.has(s.id)).map((s): LinhaMagia => ({ spell: s, origem: 'classe' })),
     ...linhasConcedidas.filter((l) => l.spell.level > 0),
   ]
+  /** Círculos que têm alguma magia — a base do "fechar tudo". */
+  const circulosComMagia = [...new Set(todasAsMagias.map((l) => l.spell.level))]
 
   // ---------- Ações ----------
   /** Prepara uma magia numa vaga livre. */
@@ -374,7 +472,16 @@ export function SpellsTab({ char }: { char: Character }) {
       {/* --- Lista única de magias, separada por círculo --- */}
       <Card
         title={`Magias (${todasAsMagias.length})`}
-        action={<button className="sm primary" onClick={() => setFolha('preparar')}>Preparar</button>}
+        action={
+          <div className="row" style={{ gap: 6 }}>
+            <button className="sm ghost" onClick={() => setRecolhidos((s) => (
+              s.size > 0 ? new Set() : new Set(circulosComMagia)
+            ))}>
+              {recolhidos.size > 0 ? '▾ Abrir tudo' : '▸ Fechar tudo'}
+            </button>
+            <button className="sm primary" onClick={() => setFolha('preparar')}>Preparar</button>
+          </div>
+        }
       >
         <div className="tiny muted" style={{ marginBottom: 10 }}>
           Preparadas pela classe: <strong className={excedente ? '' : 'gold'}>{preparadas.length}/{limitePreparadas}</strong>
@@ -409,9 +516,20 @@ export function SpellsTab({ char }: { char: Character }) {
           if (lvl === 0) return null
           const lista = todasAsMagias.filter((l) => l.spell.level === lvl).sort(ordenar)
           if (lista.length === 0) return null
+          const disponiveis = (slots[lvl - 1] ?? 0) - (char.slotsSpent[lvl] ?? 0)
           return (
-            <div key={lvl}>
-              <div className="spell-lvl">{titulo}</div>
+            <SecaoCirculo
+              key={lvl}
+              titulo={titulo}
+              quantas={lista.length}
+              aberta={!recolhidos.has(lvl)}
+              onAlternar={() => alternarCirculo(lvl)}
+            >
+              {(slots[lvl - 1] ?? 0) > 0 && (
+                <div className="tiny muted" style={{ margin: '0 0 6px 2px' }}>
+                  {disponiveis}/{slots[lvl - 1]} espaço(s) de {titulo.toLowerCase()} livre(s)
+                </div>
+              )}
               {lista.map((l) => renderLinha(
                 l,
                 l.origem === 'classe' ? (
@@ -425,7 +543,7 @@ export function SpellsTab({ char }: { char: Character }) {
                   >{trocaLivre ? '✕' : '⇄'}</button>
                 ) : undefined,
               ))}
-            </div>
+            </SecaoCirculo>
           )
         })}
 
@@ -596,6 +714,24 @@ export function SpellsTab({ char }: { char: Character }) {
       )}
 
       {detail && <DetalheMagia id={detail} onClose={() => setDetail(null)} />}
+
+      {/* Conjurar: escolhe como pagar, rola se quiser, e o gasto acontece sempre. */}
+      {conjurando && (
+        <ConfirmarUso
+          titulo={conjurando.spell.name}
+          subtitulo={resumoMagia(conjurando.spell)}
+          dados={dadosDaMagia(conjurando.spell)}
+          custos={custosDaMagia(conjurando)}
+          detalhe={conjurando.spell.level === 0
+            ? 'Truques não gastam espaço de magia — podem ser conjurados à vontade.'
+            : undefined}
+          aviso={conjurando.spell.level > 0 && custosDaMagia(conjurando).length === 0
+            ? 'Sem espaços de magia disponíveis para este círculo ou acima. Um descanso longo devolve todos.'
+            : undefined}
+          onUsar={(rolar, custoId) => conjurar(conjurando, rolar, custoId)}
+          onFechar={() => setConjurando(null)}
+        />
+      )}
     </div>
   )
 }

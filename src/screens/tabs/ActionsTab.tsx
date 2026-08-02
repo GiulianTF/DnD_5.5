@@ -8,12 +8,17 @@ import {
 import { roll, rollDamage, type Advantage } from '../../engine/dice'
 import { useStore } from '../../store/store'
 import { Card, Empty, Segmented } from '../../components/ui'
+import { ConfirmarUso } from '../../components/ConfirmarUso'
 
 export function ActionsTab({ char }: { char: Character }) {
   const pushRoll = useStore((s) => s.pushRoll)
   const useResource = useStore((s) => s.useResource)
   const [advantage, setAdvantage] = useState<Advantage>('normal')
   const [critArmed, setCritArmed] = useState<Record<string, boolean>>({})
+  /** opção aguardando a confirmação de uso */
+  const [usando, setUsando] = useState<{
+    grupo: ResolvedFeaturePick; nome: string; desc: string; custo: number; recurso?: ResourceState
+  } | null>(null)
 
   const attacks = attackActions(char)
   const mods = abilityMods(char)
@@ -41,17 +46,20 @@ export function ActionsTab({ char }: { char: Character }) {
 
   /**
    * Usar uma opção desconta o recurso dela (uma manobra tira um Dado de
-   * Superioridade, uma metamagia tira os Pontos de Feitiçaria do custo) e, se a
-   * característica tem um dado associado, já rola esse dado.
+   * Superioridade, uma metamagia tira os Pontos de Feitiçaria do custo). A
+   * rolagem é opcional: quem rola na mesa marca o gasto do mesmo jeito.
    */
-  const usarOpcao = (grupo: ResolvedFeaturePick, nome: string, custo: number, recurso?: ResourceState) => {
+  const usarOpcao = (rolar: boolean) => {
+    if (!usando) return
+    const { grupo, nome, custo, recurso } = usando
     if (recurso && custo > 0) useResource(char.id, recurso.id, custo)
-    if (grupo.die) {
+    if (rolar && grupo.die) {
       const lados = Number(grupo.die.replace('d', ''))
       if (Number.isFinite(lados) && lados > 0) {
         pushRoll(roll({ label: `${grupo.pick.name}: ${nome}`, sides: lados }))
       }
     }
+    setUsando(null)
   }
 
   const Contador = ({ r }: { r: ResourceState }) => {
@@ -227,7 +235,7 @@ export function ActionsTab({ char }: { char: Character }) {
                     <button
                       className="sm primary"
                       disabled={semRecurso}
-                      onClick={() => usarOpcao(g, o.name, custo, recurso)}
+                      onClick={() => setUsando({ grupo: g, nome: o.name, desc: o.desc, custo, recurso })}
                     >
                       {g.die ? `🎲 Usar ${g.die}` : 'Usar'}
                     </button>
@@ -243,6 +251,24 @@ export function ActionsTab({ char }: { char: Character }) {
         <Card title="Outros Recursos">
           {outrosRecursos.map((r) => <Contador key={r.id} r={r} />)}
         </Card>
+      )}
+
+      {usando && (
+        <ConfirmarUso
+          titulo={usando.nome}
+          subtitulo={usando.grupo.subclassName ?? usando.grupo.className}
+          dados={usando.grupo.die}
+          custos={usando.recurso && usando.custo > 0
+            ? [{
+              id: usando.recurso.id,
+              label: `${usando.custo} ${usando.recurso.name}`,
+              restantes: usando.recurso.max - usando.recurso.used,
+            }]
+            : undefined}
+          detalhe={usando.desc}
+          onUsar={usarOpcao}
+          onFechar={() => setUsando(null)}
+        />
       )}
     </div>
   )
