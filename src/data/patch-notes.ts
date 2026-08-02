@@ -23,6 +23,20 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '0.11.0',
+    date: '2026-08-02',
+    titulo: 'Usar de verdade',
+    resumo: 'Magias, habilidades e itens agora são usados na ficha — e o gasto acontece sozinho. 🔥',
+    destaques: [
+      { icone: '✨', texto: 'Botão Conjurar em cada magia. Ele pergunta se você quer rolar os dados na hora e, rolando ou não, o espaço de magia é gasto.' },
+      { icone: '🔢', texto: 'Se der para conjurar num círculo maior, você escolhe qual espaço gastar. Magias de talento com uso gratuito oferecem o uso grátis primeiro.' },
+      { icone: '⚡', texto: 'O mesmo vale para as habilidades: usar uma manobra, metamagia ou Canalizar Divindade pergunta sobre a rolagem e desconta o recurso do mesmo jeito.' },
+      { icone: '🎒', texto: 'Toque num item da mochila para abrir a descrição inteira do livro. Varinhas, cajados e anéis ganharam barra de cargas com o texto de recarga.' },
+      { icone: '🧪', texto: 'Poções e pergaminhos somem da mochila ao serem usados — sem precisar editar a quantidade na mão.' },
+      { icone: '📂', texto: 'Os círculos de magia viraram menus que abrem e fecham. Recolha os que não está usando; abrir um não fecha os outros.' },
+    ],
+  },
+  {
     version: '0.10.0',
     date: '2026-08-02',
     titulo: 'Passa a página',

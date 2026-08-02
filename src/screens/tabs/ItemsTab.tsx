@@ -6,9 +6,12 @@ import {
   armorClass, attunedCount, isProficientWithArmor, isProficientWithWeapon, resolveInventory,
 } from '../../engine/rules'
 import { formatCopper, pagar, parseCost, purseInCopper } from '../../engine/money'
+import { cargasDoItem, dadosDoItem, ehConsumivel } from '../../engine/uso'
+import { rollExpression } from '../../engine/dice'
 import { useStore } from '../../store/store'
 import { uid } from '../../engine/uid'
 import { Card, Empty, Sheet } from '../../components/ui'
+import { ConfirmarUso } from '../../components/ConfirmarUso'
 
 const CATEGORIAS = [
   { id: 'arma', label: 'Armas', items: WEAPONS },
@@ -21,8 +24,15 @@ const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLo
 
 export function ItemsTab({ char }: { char: Character }) {
   const update = useStore((s) => s.updateCharacter)
+  const pushRoll = useStore((s) => s.pushRoll)
+  const useCharges = useStore((s) => s.useCharges)
+  const consumeItem = useStore((s) => s.consumeItem)
   const [catalog, setCatalog] = useState(false)
   const [detail, setDetail] = useState<string | null>(null)
+  /** uid da entrada da mochila cuja ficha está aberta */
+  const [aberto, setAberto] = useState<string | null>(null)
+  /** uid da entrada esperando a confirmação de uso */
+  const [usando, setUsando] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const [busca, setBusca] = useState('')
 
@@ -99,6 +109,19 @@ export function ItemsTab({ char }: { char: Character }) {
   const equipados = inv.filter((r) => r.entry.equipped || r.entry.attuned)
   const guardados = inv.filter((r) => !r.entry.equipped && !r.entry.attuned)
 
+  /** Gasta uma carga (ou uma unidade, se o item se consome) e rola o dado se pedirem. */
+  const usarItem = (entryUid: string, rolar: boolean) => {
+    const r = inv.find((x) => x.entry.uid === entryUid)
+    if (!r) return
+    const cargas = cargasDoItem(r.item)
+    if (cargas) useCharges(char.id, entryUid, 1, cargas.max)
+    else if (ehConsumivel(r.item)) consumeItem(char.id, entryUid)
+
+    const dados = dadosDoItem(r.item)
+    if (rolar && dados) pushRoll(rollExpression(r.name, dados))
+    setUsando(null)
+  }
+
   const renderEntry = (r: ReturnType<typeof resolveInventory>[number]) => {
     const { entry, item, name } = r
     const podeEquipar = item.kind === 'arma' || item.kind === 'armadura' || item.kind === 'escudo'
@@ -106,17 +129,29 @@ export function ItemsTab({ char }: { char: Character }) {
     const proficiente = item.kind === 'arma'
       ? isProficientWithWeapon(char, item)
       : (item.kind === 'armadura' || item.kind === 'escudo') ? isProficientWithArmor(char, item) : true
+    const cargas = cargasDoItem(item)
+    const usadas = entry.chargesUsed ?? 0
+    const consumivel = ehConsumivel(item)
 
     return (
       <div className={`list-item${entry.equipped ? ' eq' : ''}`} key={entry.uid}>
         <div className="spread">
-          <div style={{ flex: 1 }}>
-            <strong style={{ fontSize: '.93rem' }}>{name}</strong>
+          {/* Tocar no item abre a ficha dele com a descrição inteira do livro. */}
+          <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => setAberto(entry.uid)}>
+            <strong style={{ fontSize: '.93rem' }}>
+              {name}{entry.qty > 1 && <span className="muted tiny"> ×{entry.qty}</span>}
+            </strong>
             <div className="tiny muted">{describeItem(item)}</div>
             {!proficiente && podeEquipar && (
               <div className="tiny" style={{ color: 'var(--red)' }}>⚠ Sem proficiência</div>
             )}
             {item.magic?.desc && <div className="tiny gold">{item.magic.desc}</div>}
+            {cargas && (
+              <div className="tiny gold">
+                Cargas: {cargas.max - usadas}/{cargas.max}
+                {cargas.max - usadas <= 0 && <span style={{ color: 'var(--red)' }}> · ESGOTADO</span>}
+              </div>
+            )}
           </div>
           <button className="sm ghost" onClick={() => removeItem(entry.uid)} aria-label="Remover">🗑</button>
         </div>
@@ -134,10 +169,55 @@ export function ItemsTab({ char }: { char: Character }) {
               {entry.attuned ? '✓ Sintonizado' : 'Sintonizar'}
             </button>
           )}
+          {(cargas || consumivel) && (
+            <button
+              className="sm primary"
+              disabled={!!cargas && cargas.max - usadas <= 0}
+              onClick={() => setUsando(entry.uid)}
+            >
+              ✨ Usar
+            </button>
+          )}
         </div>
       </div>
     )
   }
+
+  /** Controle de cargas, mostrado na ficha do item e para ajustes manuais. */
+  const ControleDeCargas = ({ entryUid, max, usadas, recarga }: {
+    entryUid: string; max: number; usadas: number; recarga?: string
+  }) => (
+    <div style={{ marginTop: 12 }}>
+      <div className="spread">
+        <strong style={{ fontSize: '.9rem' }}>Cargas</strong>
+        <div className="row" style={{ gap: 6 }}>
+          <button className="sm" disabled={usadas <= 0} onClick={() => useCharges(char.id, entryUid, -1, max)}>+</button>
+          <strong style={{ minWidth: 52, textAlign: 'center', color: max - usadas <= 0 ? 'var(--red)' : undefined }}>
+            {max - usadas}/{max}
+          </strong>
+          <button className="sm" disabled={max - usadas <= 0} onClick={() => useCharges(char.id, entryUid, 1, max)}>−</button>
+        </div>
+      </div>
+      <div className="slots" style={{ marginTop: 8 }}>
+        {Array.from({ length: max }, (_, i) => (
+          <button
+            key={i}
+            className={`slot${i < usadas ? ' spent' : ''}`}
+            onClick={() => useCharges(char.id, entryUid, i < usadas ? -1 : 1, max)}
+            aria-label={`Carga ${i + 1}`}
+          />
+        ))}
+      </div>
+      <div className="tiny muted" style={{ marginTop: 8 }}>
+        {recarga ? `Recarga: ${recarga}.` : 'O livro não define recarga para este item.'}
+        {' '}Use <strong>Recarregar</strong> quando o mestre devolver as cargas.
+      </div>
+      <button className="sm" style={{ width: '100%', marginTop: 8 }} disabled={usadas <= 0}
+        onClick={() => useCharges(char.id, entryUid, -max, max)}>
+        ↺ Recarregar tudo
+      </button>
+    </div>
+  )
 
   return (
     <div>
@@ -255,6 +335,62 @@ export function ItemsTab({ char }: { char: Character }) {
           </button>
         </Sheet>
       )}
+
+      {/* Ficha do item que está na mochila: descrição do livro + controles de uso. */}
+      {aberto && (() => {
+        const r = inv.find((x) => x.entry.uid === aberto)
+        if (!r) return null
+        const cargas = cargasDoItem(r.item)
+        const usadas = r.entry.chargesUsed ?? 0
+        const consumivel = ehConsumivel(r.item)
+        return (
+          <Sheet title={r.name} onClose={() => setAberto(null)}>
+            <DetalheItem item={r.item} />
+            {r.entry.qty > 1 && (
+              <div className="tiny muted" style={{ marginTop: 10 }}>
+                Você tem <strong className="gold">{r.entry.qty}</strong> na mochila.
+              </div>
+            )}
+            {cargas && (
+              <ControleDeCargas entryUid={r.entry.uid} max={cargas.max} usadas={usadas} recarga={cargas.recarga} />
+            )}
+            {(cargas || consumivel) && (
+              <button
+                className="primary" style={{ width: '100%', marginTop: 12 }}
+                disabled={!!cargas && cargas.max - usadas <= 0}
+                onClick={() => { setAberto(null); setUsando(r.entry.uid) }}
+              >
+                ✨ Usar {consumivel && !cargas ? '(gasta uma unidade)' : ''}
+              </button>
+            )}
+          </Sheet>
+        )
+      })()}
+
+      {/* Confirmação de uso: rolar agora ou só marcar o gasto. */}
+      {usando && (() => {
+        const r = inv.find((x) => x.entry.uid === usando)
+        if (!r) return null
+        const cargas = cargasDoItem(r.item)
+        const usadas = r.entry.chargesUsed ?? 0
+        const consumivel = ehConsumivel(r.item)
+        const custo = cargas
+          ? [{ id: 'carga', label: '1 carga', restantes: cargas.max - usadas }]
+          : consumivel
+            ? [{ id: 'unidade', label: '1 unidade', restantes: r.entry.qty }]
+            : undefined
+        return (
+          <ConfirmarUso
+            titulo={r.name}
+            subtitulo={describeItem(r.item)}
+            dados={dadosDoItem(r.item)}
+            custos={custo}
+            aviso={cargas && cargas.max - usadas <= 0 ? 'Este item está sem cargas.' : undefined}
+            onUsar={(rolar) => usarItem(r.entry.uid, rolar)}
+            onFechar={() => setUsando(null)}
+          />
+        )
+      })()}
     </div>
   )
 }

@@ -23,6 +23,9 @@ import { APP_VERSION, PATCH_NOTES, formatarData, notaAtual } from './data/patch-
 import {
   FOLGA, LIMIAR, decidirTroca, definirEixo, deslocamento, proximoIndice,
 } from './engine/swipe'
+import {
+  cargasDoItem, circulosDisponiveis, dadosDaMagia, dadosNoTexto, ehConsumivel, ehUsavel,
+} from './engine/uso'
 
 // Roda no Node via scripts/run-tests.cjs; o projeto não depende de @types/node.
 declare const process: { exitCode?: number }
@@ -672,6 +675,61 @@ delete (antiga as Partial<Character>).classChoices
 delete (antiga as Partial<Character>).originFeats
 ok(normalizeCharacter(antiga).originFeats.length === 0, 'normalizeCharacter preenche os campos que faltam')
 ok(characterFeats(antiga).length > 0 && armorClass(antiga).total > 0, 'ficha antiga continua calculando sem quebrar')
+
+console.log('\n== Itens usaveis e cargas ==')
+// As cargas saem do proprio texto do livro, entao nao ha numero duplicado nos dados.
+const comCargas = MAGIC_ITEMS.filter((i) => !!cargasDoItem(i))
+ok(comCargas.length > 20, `${comCargas.length} itens magicos declaram cargas`)
+for (const i of comCargas) {
+  const c = cargasDoItem(i)!
+  ok(c.max > 0 && c.max <= 100, `${i.name}: ${c.max} carga(s) num intervalo plausivel`)
+}
+const varinhaDeMisseis = MAGIC_ITEMS.find((i) => i.id === 'varinha-de-misseis-magicos')
+if (varinhaDeMisseis) {
+  const c = cargasDoItem(varinhaDeMisseis)!
+  ok(c.max === 7, `Varinha de Misseis Magicos tem 7 cargas (${c.max})`)
+  ok(!!c.recarga && /carga/i.test(c.recarga), `recarga lida do livro: ${c.recarga?.slice(0, 40)}`)
+}
+// "Estas lentes ... têm 3 cargas": o plural acentuado nao pode escapar, senao o
+// numero do CUSTO ("Com 1 carga, voce conjura...") viraria o total do item.
+const lentes = MAGIC_ITEMS.find((i) => i.id === 'olhos-do-encantamento')
+ok(!lentes || cargasDoItem(lentes)?.max === 3, `Olhos do Encantamento: 3 cargas (${lentes && cargasDoItem(lentes)?.max})`)
+// "gastar 1 das 3 cargas dele" tambem declara o total.
+const tresDesejos = MAGIC_ITEMS.find((i) => i.id === 'anel-dos-tres-desejos')
+ok(!tresDesejos || cargasDoItem(tresDesejos)?.max === 3, `Anel dos Tres Desejos: 3 cargas (${tresDesejos && cargasDoItem(tresDesejos)?.max})`)
+// Total rolado ("a arma tem 1d3 cargas") fica sem barra: nao ha maximo fixo.
+const laminaDaSorte = MAGIC_ITEMS.find((i) => i.id === 'lamina-da-sorte')
+ok(!laminaDaSorte || !cargasDoItem(laminaDaSorte), 'total rolado (1d3 cargas) nao vira barra de cargas')
+
+// Item comum nao tem carga nenhuma para controlar.
+ok(!cargasDoItem(itemById('espada-longa')!), 'Espada Longa nao tem cargas')
+ok(!ehUsavel(itemById('espada-longa')!), 'Espada Longa nao e um item de uso')
+const pocao = MAGIC_ITEMS.find((i) => i.magic?.category === 'Poção')
+ok(!!pocao && ehConsumivel(pocao), `pocao e consumivel (${pocao?.name})`)
+ok(!!pocao && ehUsavel(pocao), 'pocao aparece com botao de usar')
+ok(!ehConsumivel(itemById('espada-longa')!), 'arma nao e consumivel')
+
+console.log('\n== Dado sugerido pelo texto ==')
+ok(dadosNoTexto(['sofre 8d6 de dano de fogo']) === '8d6', 'le o dado do corpo do texto')
+ok(dadosNoTexto(['nenhum dado aqui']) === undefined, 'texto sem dado nao sugere rolagem')
+// O acrescimo por circulo superior nao pode virar a rolagem principal.
+ok(dadosNoTexto(['cura o alvo.', 'Usando um Espaço de Magia de Círculo Superior. Some 1d8.']) === undefined,
+  'o dado do upcast nao vira a rolagem base')
+const bolaDeFogo = spellById('bola-de-fogo')
+ok(!!bolaDeFogo && dadosDaMagia(bolaDeFogo) === '8d6', `Bola de Fogo sugere 8d6 (${bolaDeFogo && dadosDaMagia(bolaDeFogo)})`)
+
+console.log('\n== Qual espaco de magia gastar ==')
+// 4 espacos de 1o, 3 de 2o, 2 de 3o — com um de 2o ja gasto.
+const totais = [4, 3, 2]
+ok(JSON.stringify(circulosDisponiveis(1, totais, {})) === '[1,2,3]',
+  'magia de 1o circulo pode subir para o 2o e o 3o')
+ok(JSON.stringify(circulosDisponiveis(3, totais, {})) === '[3]', 'magia de 3o so cabe no 3o')
+ok(JSON.stringify(circulosDisponiveis(1, totais, { 1: 4 })) === '[2,3]',
+  'circulo esgotado sai da lista')
+ok(circulosDisponiveis(1, totais, { 1: 4, 2: 3, 3: 2 }).length === 0,
+  'sem espacos, nao ha por onde conjurar')
+ok(JSON.stringify(circulosDisponiveis(0, totais, {})) === '[1,2,3]',
+  'truque nao trava a lista em zero')
 
 console.log('\n== Gesto lateral entre as abas ==')
 // O gesto so vale quando e claramente horizontal: rolar a pagina nao pode trocar de aba.

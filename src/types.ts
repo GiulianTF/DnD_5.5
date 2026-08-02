@@ -496,6 +496,8 @@ export interface InventoryEntry {
   attuned?: boolean
   /** bônus mágico aplicado a uma arma/armadura comum (+1/+2/+3) */
   bonus?: number
+  /** cargas já gastas deste item (o total sai do texto do livro) */
+  chargesUsed?: number
   customName?: string
 }
 

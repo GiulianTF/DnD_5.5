@@ -103,6 +103,10 @@ interface AppState {
   spendSlot: (id: string, level: number, delta: number) => void
   spendPactSlot: (id: string, delta: number) => void
   useResource: (id: string, resourceId: string, delta: number) => void
+  /** gasta (ou devolve) cargas de um item da mochila, preso entre 0 e o máximo */
+  useCharges: (id: string, entryUid: string, delta: number, max: number) => void
+  /** consome uma unidade de um item que se gasta; some da mochila ao acabar */
+  consumeItem: (id: string, entryUid: string) => void
   applyDamage: (id: string, amount: number) => void
   heal: (id: string, amount: number) => void
   setTempHp: (id: string, amount: number) => void
@@ -165,6 +169,22 @@ export const useStore = create<AppState>()(
           const cur = c.resourcesUsed[resourceId] ?? 0
           return { resourcesUsed: { ...c.resourcesUsed, [resourceId]: Math.max(0, cur + delta) } }
         }),
+
+      useCharges: (id, entryUid, delta, max) =>
+        get().updateCharacter(id, (c) => ({
+          inventory: c.inventory.map((e) => (e.uid === entryUid
+            ? { ...e, chargesUsed: Math.max(0, Math.min(max, (e.chargesUsed ?? 0) + delta)) }
+            : e)),
+        })),
+
+      consumeItem: (id, entryUid) =>
+        get().updateCharacter(id, (c) => ({
+          inventory: c.inventory.flatMap((e) => {
+            if (e.uid !== entryUid) return [e]
+            // A última unidade sai da mochila em vez de ficar zerada lá.
+            return e.qty > 1 ? [{ ...e, qty: e.qty - 1 }] : []
+          }),
+        })),
 
       applyDamage: (id, amount) =>
         get().updateCharacter(id, (c) => {
