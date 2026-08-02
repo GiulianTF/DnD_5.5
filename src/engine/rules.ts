@@ -767,9 +767,26 @@ export interface ResolvedInnateSpell {
 export function innateUsesLabel(char: Character, freeUses?: InnateSpell['freeUses']): string {
   if (freeUses === 'vontade') return 'À vontade'
   if (freeUses === 'prof-longo') return `${proficiencyBonus(char.level)}×/descanso longo`
-  if (freeUses === 'longo') return '1×/descanso longo (ou gastando um espaço de magia)'
+  if (freeUses === 'longo') return '1×/descanso longo'
   return ''
 }
+
+/**
+ * Quantas conjurações gratuitas por descanso longo a magia concede. Truques à
+ * vontade e magias sem uso grátis devolvem 0 — não há nada para marcar.
+ */
+export function innateFreeUses(char: Character, freeUses?: InnateSpell['freeUses']): number {
+  if (freeUses === 'longo') return 1
+  if (freeUses === 'prof-longo') return proficiencyBonus(char.level)
+  return 0
+}
+
+/**
+ * Chave em `resourcesUsed` onde ficam os usos gratuitos já gastos de uma magia
+ * inata. Como `characterResources` não devolve essas magias, o descanso longo
+ * zera a contagem naturalmente e o curto a preserva — que é a regra do PHB 2024.
+ */
+export const innateSpellResourceId = (spellId: string) => `magia-inata:${spellId}`
 
 // ---------- Magias escolhidas fora da lista da classe ----------
 /** Um grupo de escolha de magias (espécie, talento, estilo de luta) já resolvido. */

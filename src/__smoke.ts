@@ -1,7 +1,7 @@
 // Teste de fumaça das regras. Executado via esbuild + node; não faz parte do app.
 import type { Character } from './types'
 import { RARITY_NAMES, RARITY_ORDER } from './types'
-import { newCharacter, normalizeCharacter } from './store/store'
+import { newCharacter, normalizeCharacter, useStore } from './store/store'
 import {
   armorClass, attackActions, characterFeats, maxHp, spellSlots, pactSlots, preparedLimit, cantripLimit,
   characterResources, innateSpells, levelUpSummary, finalAbilities, pendingChoices, saves, skillValues,
@@ -9,6 +9,7 @@ import {
   isProficientWithWeapon, preparableSpells, preparationMode, preparedSpellIds, proficiencyGroups,
   spellListClasses, armorTraining, classLabel, classLevel, featureOptionBlocked, featurePickGroups,
   isMulticlass, multiclassBlockers, multiclassOptions, proficiencyBonus, withLevelIn,
+  innateFreeUses, innateSpellResourceId, innateUsesLabel,
 } from './engine/rules'
 import { pagar, parseCost, purseInCopper } from './engine/money'
 import { CLASSES, classById } from './data/classes'
@@ -18,6 +19,7 @@ import { BACKGROUNDS } from './data/backgrounds'
 import { ALL_ITEMS, ARMORS, MAGIC_ITEMS, itemById } from './data/equipment'
 import { FEATS, featById } from './data/feats'
 import { skillById } from './data/skills'
+import { APP_VERSION, PATCH_NOTES, formatarData, notaAtual } from './data/patch-notes'
 
 // Roda no Node via scripts/run-tests.cjs; o projeto não depende de @types/node.
 declare const process: { exitCode?: number }
@@ -264,6 +266,47 @@ const gruposIniciado = spellPickGroups(iniciado)
 ok(gruposIniciado.length === 2, `Iniciado em Magia abre 2 grupos (${gruposIniciado.length})`)
 ok(gruposIniciado[0].pick.count === 2 && gruposIniciado[0].pick.spellLevel === 0, '2 truques')
 ok(gruposIniciado[1].pick.count === 1 && gruposIniciado[1].pick.spellLevel === 1, '1 magia de 1o circulo')
+
+// A magia de 1o circulo do talento fica sempre pronta e nao gasta espaco: 1 uso por descanso longo.
+const iniciadoEscolhido: Character = {
+  ...iniciado,
+  spellPicks: {
+    'iniciado-em-magia-truques': ['orientacao', 'chama-sagrada'],
+    'iniciado-em-magia-magia': ['bencao'],
+  },
+}
+const inatasIniciado = innateSpells(iniciadoEscolhido)
+const bencao = inatasIniciado.find((m) => m.spell.id === 'bencao')
+ok(!!bencao, 'a magia do Iniciado em Magia entra nas magias do personagem')
+ok(bencao!.freeUses === 'longo', 'a magia do talento tem uso gratuito por descanso longo')
+ok(innateFreeUses(iniciadoEscolhido, bencao!.freeUses) === 1,
+  `1 conjuracao gratuita (${innateFreeUses(iniciadoEscolhido, bencao!.freeUses)})`)
+ok(innateUsesLabel(iniciadoEscolhido, bencao!.freeUses) === '1×/descanso longo',
+  `rotulo dos usos: ${innateUsesLabel(iniciadoEscolhido, bencao!.freeUses)}`)
+const truqueIniciado = inatasIniciado.find((m) => m.spell.id === 'orientacao')
+ok(!!truqueIniciado && innateFreeUses(iniciadoEscolhido, truqueIniciado.freeUses) === 0,
+  'truque do talento e a vontade, sem usos para marcar')
+// Os usos gastos moram em `resourcesUsed`, entao o descanso longo (que zera o registro) os devolve.
+ok(innateSpellResourceId('bencao') === 'magia-inata:bencao',
+  `chave dos usos gratuitos: ${innateSpellResourceId('bencao')}`)
+ok(!characterResources(iniciadoEscolhido).some((r) => r.id === innateSpellResourceId('bencao')),
+  'usos de magia inata nao aparecem entre os recursos da ficha')
+// O drow tem PB usos de Falar com Animais quando a linhagem concede 'prof-longo'.
+ok(innateFreeUses(drowGuerreiro, 'prof-longo') === proficiencyBonus(drowGuerreiro.level),
+  `'prof-longo' vale o bonus de proficiencia (${innateFreeUses(drowGuerreiro, 'prof-longo')})`)
+
+// O uso gratuito sobrevive ao descanso curto e volta no longo.
+const chaveBencao = innateSpellResourceId('bencao')
+useStore.setState({ characters: [], activeId: null })
+useStore.getState().addCharacter(iniciadoEscolhido)
+const usosDe = (id: string) => useStore.getState().characters.find((c) => c.id === id)?.resourcesUsed[chaveBencao] ?? 0
+useStore.getState().useResource(iniciadoEscolhido.id, chaveBencao, 1)
+ok(usosDe(iniciadoEscolhido.id) === 1, 'marcar o uso gratuito registra 1 conjuracao gasta')
+useStore.getState().shortRest(iniciadoEscolhido.id)
+ok(usosDe(iniciadoEscolhido.id) === 1, 'descanso curto NAO devolve o uso gratuito')
+useStore.getState().longRest(iniciadoEscolhido.id)
+ok(usosDe(iniciadoEscolhido.id) === 0, 'descanso longo devolve o uso gratuito')
+useStore.setState({ characters: [], activeId: null })
 
 // Estilo de Luta Combatente Abencoado (Paladino, nivel 2): 2 truques de Clerigo.
 const abencoado: Character = newCharacter({
@@ -626,6 +669,28 @@ delete (antiga as Partial<Character>).classChoices
 delete (antiga as Partial<Character>).originFeats
 ok(normalizeCharacter(antiga).originFeats.length === 0, 'normalizeCharacter preenche os campos que faltam')
 ok(characterFeats(antiga).length > 0 && armorClass(antiga).total > 0, 'ficha antiga continua calculando sem quebrar')
+
+console.log('\n== Notas de atualizacao ==')
+// A primeira entrada manda: e dela que scripts/versao.cjs tira a versao do app.
+ok(PATCH_NOTES.length > 0, `ha ${PATCH_NOTES.length} nota(s) de atualizacao`)
+ok(APP_VERSION === PATCH_NOTES[0].version, `APP_VERSION segue a nota mais nova (${APP_VERSION})`)
+ok(notaAtual()?.version === APP_VERSION, 'notaAtual() devolve a nota da versao que esta rodando')
+
+const versaoNumero = (v: string) => v.split('.').map(Number).reduce((a, n) => a * 1000 + n, 0)
+for (let i = 0; i < PATCH_NOTES.length; i++) {
+  const n = PATCH_NOTES[i]
+  ok(/^\d+\.\d+\.\d+$/.test(n.version), `v${n.version}: versao no formato x.y.z`)
+  ok(/^\d{4}-\d{2}-\d{2}$/.test(n.date), `v${n.version}: data no formato aaaa-mm-dd`)
+  ok(n.titulo.length > 0 && n.resumo.length > 0, `v${n.version}: tem titulo e resumo`)
+  ok(n.destaques.length > 0 && n.destaques.every((d) => d.icone && d.texto),
+    `v${n.version}: ${n.destaques.length} destaque(s), todos com icone e texto`)
+  if (i > 0) {
+    ok(versaoNumero(PATCH_NOTES[i - 1].version) > versaoNumero(n.version),
+      `v${n.version} vem depois de v${PATCH_NOTES[i - 1].version} na lista`)
+  }
+}
+ok(new Set(PATCH_NOTES.map((n) => n.version)).size === PATCH_NOTES.length, 'nao ha versao repetida')
+ok(formatarData('2026-08-02') === '2 de agosto de 2026', `formatarData: ${formatarData('2026-08-02')}`)
 
 console.log(falhas === 0 ? '\n>>> TODOS OS TESTES DE REGRAS PASSARAM' : `\n>>> ${falhas} FALHA(S) NAS REGRAS`)
 if (falhas > 0) process.exitCode = 1

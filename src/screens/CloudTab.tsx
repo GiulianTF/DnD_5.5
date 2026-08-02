@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { useStore } from '../store/store'
 import { useAuth } from '../store/auth'
 import { syncNow, exportarJSON } from '../store/sync'
+import { APP_VERSION, notaAtual } from '../data/patch-notes'
 import { Card } from '../components/ui'
 
-export function CloudTab({ online }: { online: boolean }) {
+export function CloudTab({ online, onNovidades }: { online: boolean; onNovidades?: () => void }) {
   const { lastSync, characters } = useStore()
   const { session, signOut, setOffline } = useAuth()
   const [status, setStatus] = useState<{ ok: boolean; message: string } | null>(null)
@@ -15,6 +16,7 @@ export function CloudTab({ online }: { online: boolean }) {
 
   const logado = Boolean(session)
   const email = session?.user?.email ?? ''
+  const atual = notaAtual()
 
   const sincronizar = async () => {
     setSincronizando(true)
@@ -116,6 +118,19 @@ export function CloudTab({ online }: { online: boolean }) {
         <button style={{ width: '100%' }} disabled={!characters.length} onClick={() => exportarJSON(characters)}>
           ⬇ Exportar todas as fichas (JSON)
         </button>
+      </Card>
+
+      <Card title="Sobre o app">
+        <div className="row wrap" style={{ gap: 6, marginBottom: 10 }}>
+          <span className="pill gold">{`v${APP_VERSION}`}</span>
+          <span className="pill">{atual?.titulo ?? 'Fichas D&D 2024'}</span>
+        </div>
+        <p className="muted tiny" style={{ marginBottom: 10 }}>
+          {atual?.resumo ?? 'Fichas de D&D 5ª Edição pelo Livro do Jogador 2024.'}
+        </p>
+        {onNovidades && (
+          <button style={{ width: '100%' }} onClick={onNovidades}>✨ Ver as novidades</button>
+        )}
       </Card>
     </div>
   )

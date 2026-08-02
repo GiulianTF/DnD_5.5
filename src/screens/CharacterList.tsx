@@ -5,9 +5,14 @@ import { classById } from '../data/classes'
 import { speciesById } from '../data/species'
 import { currentHp, maxHp, armorClass } from '../engine/rules'
 import { exportarJSON, importarJSON } from '../store/sync'
+import { VersionBadge } from './PatchNotes'
 import { Card, Empty } from '../components/ui'
 
-export function CharacterList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: string) => void }) {
+export function CharacterList({ onNew, onOpen, onNovidades }: {
+  onNew: () => void
+  onOpen: (id: string) => void
+  onNovidades: () => void
+}) {
   const { characters, setActive, deleteCharacter, replaceAll } = useStore()
   const { session, signOut, setOffline } = useAuth()
   const fileRef = useRef<HTMLInputElement>(null)
@@ -53,6 +58,7 @@ export function CharacterList({ onNew, onOpen }: { onNew: () => void; onOpen: (i
             {session?.user?.email ?? 'Usando sem conta'} · Livro do Jogador 2024
           </div>
         </div>
+        <VersionBadge onClick={onNovidades} />
         <button className="sm ghost" onClick={voltarAoLogin} title="Voltar para a tela de login">
           {session ? '⎋ Sair' : '⎋ Login'}
         </button>

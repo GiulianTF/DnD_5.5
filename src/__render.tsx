@@ -7,6 +7,8 @@ import { CharacterCreator } from './screens/CharacterCreator'
 import { CharacterSheet } from './screens/CharacterSheet'
 import { CharacterList } from './screens/CharacterList'
 import { CloudTab } from './screens/CloudTab'
+import { PatchNotes, VersionBadge } from './screens/PatchNotes'
+import { APP_VERSION, PATCH_NOTES } from './data/patch-notes'
 import { LevelUpWizard } from './screens/LevelUpWizard'
 import { SheetTab } from './screens/tabs/SheetTab'
 import { SkillsTab } from './screens/tabs/SkillsTab'
@@ -26,6 +28,22 @@ const tenta = (nome: string, fn: () => string) => {
     const html = fn()
     if (!html || html.length < 20) { falhas++; console.log(`  X ${nome}: saida vazia`) }
     else console.log(`  . ${nome} (${html.length} bytes)`)
+  } catch (e) {
+    falhas++
+    console.log(`  X ${nome}: ${(e as Error).message}`)
+  }
+}
+
+/** Como `tenta`, mas exige que o HTML contenha (e não contenha) certos trechos. */
+const exige = (nome: string, fn: () => string, contem: string[], naoContem: string[] = []) => {
+  try {
+    const html = fn()
+    const faltando = contem.filter((t) => !html.includes(t))
+    const sobrando = naoContem.filter((t) => html.includes(t))
+    if (faltando.length || sobrando.length) {
+      falhas++
+      console.log(`  X ${nome}: falta [${faltando.join(', ')}] sobra [${sobrando.join(', ')}]`)
+    } else console.log(`  . ${nome}`)
   } catch (e) {
     falhas++
     console.log(`  X ${nome}: ${(e as Error).message}`)
@@ -80,10 +98,27 @@ useStore.setState({ characters: [guerreiro, mago, bruxo], activeId: guerreiro.id
 
 console.log('\n== Telas principais ==')
 tenta('App (lista de fichas)', () => renderToString(<App />))
-tenta('CharacterList', () => renderToString(<CharacterList onNew={() => {}} onOpen={() => {}} />))
+tenta('CharacterList', () => renderToString(<CharacterList onNew={() => {}} onOpen={() => {}} onNovidades={() => {}} />))
 tenta('CharacterCreator', () => renderToString(<CharacterCreator onDone={() => {}} onCancel={() => {}} />))
 tenta('CloudTab', () => renderToString(<CloudTab online={true} />))
 tenta('DiceRollerSheet', () => renderToString(<DiceRollerSheet onClose={() => {}} />))
+
+// Novidades: todas as versoes na tela, a mais nova em cima e marcada como atual.
+exige('PatchNotes (todas as versoes)',
+  () => renderToString(<PatchNotes />),
+  [...PATCH_NOTES.map((n) => `v${n.version}`), PATCH_NOTES[0].titulo, 'versão atual'])
+exige('VersionBadge (versao nunca vista mostra o selo)',
+  () => renderToString(<VersionBadge onClick={() => {}} />), [`v${APP_VERSION}`, '✨'])
+tenta('PatchNotes (ordem: a versao atual vem primeiro)', () => {
+  const html = renderToString(<PatchNotes />)
+  const posicoes = PATCH_NOTES.map((n) => html.indexOf(`v${n.version}`))
+  const ausente = posicoes.findIndex((p) => p < 0)
+  if (ausente >= 0) throw new Error(`v${PATCH_NOTES[ausente].version} nao aparece na tela`)
+  for (let i = 1; i < posicoes.length; i++) {
+    if (posicoes[i] < posicoes[i - 1]) throw new Error(`v${PATCH_NOTES[i].version} aparece antes da anterior`)
+  }
+  return html
+})
 
 console.log('\n== Ficha completa (guerreiro nv12) ==')
 tenta('CharacterSheet', () => renderToString(<CharacterSheet char={guerreiro} onBack={() => {}} />))
@@ -173,6 +208,42 @@ const drow: Character = newCharacter({
   hpRolls: [null, null, null, null],
 })
 tenta('SpellsTab (guerreiro drow: magias de especie)', () => renderToString(<SpellsTab char={drow} />))
+
+// Lista unica: magias de classe, de subclasse e de talento no mesmo cartao, por circulo.
+const clerigoIniciado: Character = newCharacter({
+  name: 'Miri', classId: 'clerigo', speciesId: 'humano', backgroundId: 'acolito', level: 5,
+  subclassId: 'vida', classChoices: { 'ordem-divina': 'protetor' },
+  originFeats: ['iniciado-em-magia'],
+  hpRolls: Array(4).fill(null),
+  spellsKnown: ['chama-sagrada', 'orientacao', 'comando'],
+  spellsPrepared: ['comando'],
+  spellPicks: { 'iniciado-em-magia-truques': ['reparar', 'luz'], 'iniciado-em-magia-magia': ['escudo-da-fe'] },
+})
+exige('SpellsTab (lista unica: classe + dominio + talento)',
+  () => renderToString(<SpellsTab char={clerigoIniciado} />),
+  [
+    'Comando',            // preparada pela classe
+    'Curar Ferimentos',   // sempre preparada pelo Dominio da Vida
+    'Escudo da F',        // magia do talento, conjurada sem gastar espaco
+    'sempre preparada', 'sem espa',
+    '1º Nível', '2º Nível',
+    'Uso gratuito 1 de Escudo da Fé',   // marcador do uso por descanso longo
+  ],
+  // A separacao por cartoes de origem sumiu: tudo vive na lista unica.
+  ['Magias de Espécie e Talentos', 'Magias Sempre Preparadas'])
+
+// A mesma magia vinda do dominio E do talento aparece uma unica vez.
+const clerigoBencaoDupla: Character = {
+  ...clerigoIniciado,
+  spellPicks: { ...clerigoIniciado.spellPicks, 'iniciado-em-magia-magia': ['bencao'] },
+}
+tenta('SpellsTab (Bencao pelo dominio e pelo talento)', () => {
+  const html = renderToString(<SpellsTab char={clerigoBencaoDupla} />)
+  const vezes = html.split('>Bênção<').length - 1
+  if (vezes !== 1) throw new Error(`Bencao aparece ${vezes}x na lista (esperado 1)`)
+  if (!html.includes('Iniciado em Magia')) throw new Error('a origem do talento sumiu do rotulo')
+  return html
+})
 tenta('SheetTab (guerreiro drow: linhagem na ficha)', () => renderToString(<SheetTab char={drow} />))
 tenta('CharacterSheet (guerreiro drow)', () => renderToString(<CharacterSheet char={drow} onBack={() => {}} />))
 tenta('CharacterSheet (editar escolhas)', () => renderToString(<CharacterSheet char={goliasPendente} onBack={() => {}} />))

@@ -39,7 +39,13 @@ function compilarERodar(entrada, nome) {
 let falhou = false
 const original = process.exitCode
 try {
-  if (alvo === 'regras' || alvo === 'todos') compilarERodar('src/__smoke.ts', 'regras')
+  if (alvo === 'regras' || alvo === 'todos') {
+    // A etiqueta de versao do app vem do package.json; ela tem que bater com a
+    // nota de atualizacao mais recente. `npm run versao` sincroniza as duas.
+    console.log('\n== Versao do app ==')
+    execFileSync(process.execPath, [path.join('scripts', 'versao.cjs'), '--check'], { cwd: raiz, stdio: 'inherit' })
+    compilarERodar('src/__smoke.ts', 'regras')
+  }
   if (alvo === 'render' || alvo === 'todos') compilarERodar('src/__render.tsx', 'render')
   // Por último: remove crypto.randomUUID do ambiente, então não pode rodar antes dos outros.
   if (alvo === 'inseguro' || alvo === 'todos') compilarERodar('src/__insecure.tsx', 'inseguro')

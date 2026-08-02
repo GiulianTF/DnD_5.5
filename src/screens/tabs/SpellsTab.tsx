@@ -1,13 +1,13 @@
-import { useState } from 'react'
-import type { Character, Spell } from '../../types'
+import { useState, type ReactNode } from 'react'
+import type { AbilityKey, Character, InnateSpell, Spell } from '../../types'
 import { ABILITY_NAMES } from '../../types'
 import { spellById } from '../../data/spells'
 import { classById } from '../../data/classes'
 import {
   PREPARATION_RULES, alwaysPreparedSpells, availableCantrips, cantripLimit, casterClasses,
-  classLabel, classSpellCatalog, fmtMod, innateSpells, innateUsesLabel, knownCantripIds, pactSlots,
-  preparableSpells, preparationMode, preparedLimit, preparedSpellIds, spellListClasses, spellSlots,
-  spellcasting, subclassOf,
+  classLabel, classSpellCatalog, fmtMod, innateFreeUses, innateSpellResourceId, innateSpells,
+  innateUsesLabel, knownCantripIds, pactSlots, preparableSpells, preparationMode, preparedLimit,
+  preparedSpellIds, spellListClasses, spellSlots, spellcasting,
 } from '../../engine/rules'
 import { useStore } from '../../store/store'
 import { Card, Empty, Sheet, SpellText } from '../../components/ui'
@@ -17,8 +17,34 @@ const ORDINAIS = ['Truques', '1º Nível', '2º Nível', '3º Nível', '4º Nív
 const resumoMagia = (s: Spell) =>
   `${s.school} · ${s.castingTime} · ${s.range}${s.concentration ? ' · Concentração' : ''}${s.ritual ? ' · Ritual' : ''}`
 
+/**
+ * Uma linha da lista única de magias. Independentemente de a magia vir da
+ * classe, da subclasse, da espécie ou de um talento, ela é exibida no mesmo
+ * formato e agrupada pelo círculo — o jogador não precisa caçar em que cartão
+ * cada magia foi parar.
+ */
+interface LinhaMagia {
+  spell: Spell
+  /**
+   * `classe` ocupa vaga no limite de preparadas; `sempre` está sempre pronta e
+   * gasta espaço normalmente; `inata` está sempre pronta e tem conjurações
+   * gratuitas (Iniciado em Magia, Tocado pelo Feérico, linhagens de espécie).
+   */
+  origem: 'classe' | 'sempre' | 'inata'
+  /** característica que concedeu a magia ("Domínio da Vida", "Iniciado em Magia") */
+  source?: string
+  freeUses?: InnateSpell['freeUses']
+  /** conjuração própria da magia inata, que pode diferir da CD da classe */
+  ability?: AbilityKey
+  saveDC?: number
+  attackBonus?: number
+  nota?: string
+}
+
+const ordenar = (a: LinhaMagia, b: LinhaMagia) => a.spell.name.localeCompare(b.spell.name)
+
 export function SpellsTab({ char }: { char: Character }) {
-  const { updateCharacter, spendSlot, spendPactSlot } = useStore()
+  const { updateCharacter, spendSlot, spendPactSlot, useResource } = useStore()
   const [detail, setDetail] = useState<string | null>(null)
   /** folha aberta: preparação de magias, escolha de truques ou grimório */
   const [folha, setFolha] = useState<'preparar' | 'truques' | 'grimorio' | null>(null)
@@ -30,7 +56,6 @@ export function SpellsTab({ char }: { char: Character }) {
   const slots = spellSlots(char)
   const pact = pactSlots(char)
   const modo = preparationMode(char)
-  const subclasse = subclassOf(char)
   /** Numa ficha multiclasse cada classe conjura com a habilidade e a CD dela. */
   const conjuradoras = casterClasses(char)
 
@@ -38,54 +63,105 @@ export function SpellsTab({ char }: { char: Character }) {
   const inatas = innateSpells(char)
   const automaticas = alwaysPreparedSpells(char)
 
-  const cardInatas = inatas.length > 0 && (
-    <Card title="Magias de Espécie e Talentos">
-      <p className="muted tiny" style={{ marginBottom: 10 }}>
-        Concedidas pelos seus traços e talentos — você as tem além das magias da classe e elas
-        não ocupam vaga no seu limite de preparadas.
-      </p>
-      {inatas.map((m) => (
-        <div className="list-item eq" key={m.spell.id}>
-          <div style={{ flex: 1 }} onClick={() => setDetail(m.spell.id)}>
-            <strong style={{ fontSize: '.92rem' }}>
-              {m.spell.name} <span className="muted tiny">({m.spell.level === 0 ? 'truque' : `${m.spell.level}º`})</span>
-            </strong>
-            <div className="tiny muted">{resumoMagia(m.spell)}</div>
-            <div className="tiny gold">{m.source}{innateUsesLabel(char, m.freeUses) && ` · ${innateUsesLabel(char, m.freeUses)}`}</div>
-            <div className="tiny muted">
-              {ABILITY_NAMES[m.ability]} · CD {m.saveDC} · ataque {fmtMod(m.attackBonus)}
-            </div>
-            {m.nota && <div className="tiny muted">{m.nota}</div>}
-          </div>
-        </div>
-      ))}
-    </Card>
-  )
+  /*
+   * Linhas das magias que já vêm prontas, de qualquer fonte fora da lista da
+   * classe. A mesma magia pode vir por dois caminhos — o Domínio da Vida deixa
+   * Bênção sempre preparada e o Iniciado em Magia ainda dá uma conjuração
+   * gratuita dela. Nesse caso ela vira uma linha só, pela fonte inata (a que
+   * dispensa o espaço de magia), com as duas origens no rótulo.
+   */
+  const linhasConcedidas: LinhaMagia[] = [
+    ...inatas.map((m): LinhaMagia => ({
+      spell: m.spell, origem: 'inata', source: m.source, freeUses: m.freeUses,
+      ability: m.ability, saveDC: m.saveDC, attackBonus: m.attackBonus, nota: m.nota,
+    })),
+    ...automaticas.map((m): LinhaMagia => ({ spell: m.spell, origem: 'sempre', source: m.source })),
+  ].reduce<LinhaMagia[]>((acc, l) => {
+    const anterior = acc.find((x) => x.spell.id === l.spell.id)
+    if (!anterior) acc.push(l)
+    else if (l.source && !anterior.source?.includes(l.source)) anterior.source += ` · ${l.source}`
+    return acc
+  }, [])
+  const truquesConcedidos = linhasConcedidas.filter((l) => l.spell.level === 0).sort(ordenar)
 
-  const cardAutomaticas = automaticas.length > 0 && (
-    <Card title="Magias Sempre Preparadas">
-      <p className="muted tiny" style={{ marginBottom: 10 }}>
-        Concedidas por características como {subclasse?.name ?? 'sua subclasse'}. Elas estão
-        sempre prontas, são conjuradas gastando seus espaços de magia normalmente e
-        <strong> não contam</strong> no seu limite de magias preparadas.
-      </p>
-      {automaticas.map((m) => (
-        <div className="list-item eq" key={m.spell.id}>
-          <div style={{ flex: 1 }} onClick={() => setDetail(m.spell.id)}>
-            <strong style={{ fontSize: '.92rem' }}>
-              {m.spell.name} <span className="muted tiny">({m.spell.level === 0 ? 'truque' : `${m.spell.level}º`})</span>
-            </strong>
-            <div className="tiny muted">{resumoMagia(m.spell)}</div>
-            <div className="tiny gold">{m.source}</div>
+  /** Marca ou desmarca uma conjuração gratuita de magia inata. */
+  const gastarUsoInato = (spellId: string, delta: number) =>
+    useResource(char.id, innateSpellResourceId(spellId), delta)
+
+  const usosGastos = (spellId: string) => char.resourcesUsed[innateSpellResourceId(spellId)] ?? 0
+
+  /** Uma linha da lista, no formato único usado por todas as origens. */
+  const renderLinha = (l: LinhaMagia, acao?: ReactNode) => {
+    const usosGratis = l.origem === 'inata' ? innateFreeUses(char, l.freeUses) : 0
+    const gastos = usosGratis > 0 ? Math.min(usosGratis, usosGastos(l.spell.id)) : 0
+    const rotuloUsos = l.origem === 'inata' ? innateUsesLabel(char, l.freeUses) : ''
+    return (
+      <div className="list-item eq" key={l.spell.id}>
+        <div className="spread">
+          <div style={{ flex: 1 }} onClick={() => setDetail(l.spell.id)}>
+            <strong style={{ fontSize: '.92rem' }}>{l.spell.name}</strong>
+            {l.origem !== 'classe' && (
+              <span className="tiny gold" style={{ marginLeft: 6 }}>
+                {l.origem === 'inata' ? '◈ sem espaço' : '◆ sempre preparada'}
+              </span>
+            )}
+            <div className="tiny muted">{resumoMagia(l.spell)}</div>
+            {l.source && (
+              <div className="tiny gold">{l.source}{rotuloUsos && ` · ${rotuloUsos}`}</div>
+            )}
+            {l.origem === 'inata' && l.saveDC !== undefined && l.ability && (
+              <div className="tiny muted">
+                {ABILITY_NAMES[l.ability]} · CD {l.saveDC} · ataque {fmtMod(l.attackBonus ?? 0)}
+              </div>
+            )}
+            {l.nota && <div className="tiny muted">{l.nota}</div>}
           </div>
+          {acao}
         </div>
-      ))}
+        {usosGratis > 0 && (
+          <div className="spread" style={{ marginTop: 6 }}>
+            <div className="slots">
+              {Array.from({ length: usosGratis }, (_, i) => (
+                <button
+                  key={i}
+                  className={`slot${i < gastos ? ' spent' : ''}`}
+                  onClick={() => gastarUsoInato(l.spell.id, i < gastos ? -1 : 1)}
+                  aria-label={`Uso gratuito ${i + 1} de ${l.spell.name}`}
+                />
+              ))}
+            </div>
+            <span className="tiny muted">{usosGratis - gastos}/{usosGratis} conjurações grátis</span>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  /** Cartão de truques: os da classe e os concedidos, na mesma lista. */
+  const cardTruques = (limite: number, daClasse: Spell[]) => (
+    <Card
+      title={limite > 0 ? `Truques (${daClasse.length}/${limite})` : 'Truques'}
+      action={limite > 0 ? <button className="sm primary" onClick={() => setFolha('truques')}>Escolher</button> : undefined}
+    >
+      {daClasse.length === 0 && truquesConcedidos.length === 0 && (
+        <p className="muted tiny">Você ainda não escolheu nenhum truque.</p>
+      )}
+      {[...daClasse].sort((a, b) => a.name.localeCompare(b.name))
+        .map((s) => renderLinha({ spell: s, origem: 'classe' }))}
+      {truquesConcedidos.map((l) => renderLinha(l))}
+      <div className="tiny muted" style={{ marginTop: 8 }}>
+        Truques não gastam espaço de magia.
+        {limite > 0 && ' Ao subir de nível você pode trocar um truque por outro.'}
+        {truquesConcedidos.length > 0 && (limite > 0
+          ? ' Os truques marcados vêm de traços e talentos e não contam no limite.'
+          : ' Todos vêm de traços e talentos.')}
+      </div>
     </Card>
   )
 
   // Quem não conjura pela classe ainda pode ter magias de espécie ou de subclasse.
   if (!sc || !cls || !modo) {
-    if (inatas.length === 0 && automaticas.length === 0) {
+    if (linhasConcedidas.length === 0) {
       return (
         <Empty
           icon="✨"
@@ -94,14 +170,29 @@ export function SpellsTab({ char }: { char: Character }) {
         />
       )
     }
+    const comCirculo = linhasConcedidas.filter((l) => l.spell.level > 0)
     return (
       <div>
         <div className="banner">
           {cls?.name ?? 'Sua classe'} não conjura magias de classe, mas as magias abaixo vêm
           dos seus traços e características.
         </div>
-        {cardAutomaticas}
-        {cardInatas}
+        {truquesConcedidos.length > 0 && cardTruques(0, [])}
+        {comCirculo.length > 0 && (
+          <Card title={`Magias (${comCirculo.length})`}>
+            {ORDINAIS.map((titulo, lvl) => {
+              if (lvl === 0) return null
+              const lista = comCirculo.filter((l) => l.spell.level === lvl).sort(ordenar)
+              if (lista.length === 0) return null
+              return (
+                <div key={lvl}>
+                  <div className="spell-lvl">{titulo}</div>
+                  {lista.map((l) => renderLinha(l))}
+                </div>
+              )
+            })}
+          </Card>
+        )}
         {detail && <DetalheMagia id={detail} onClose={() => setDetail(null)} />}
       </div>
     )
@@ -135,6 +226,17 @@ export function SpellsTab({ char }: { char: Character }) {
   const grimorio = char.spellsKnown
     .map((id) => spellById(id))
     .filter((s): s is Spell => !!s && s.level > 0)
+
+  /*
+   * A lista única: magias preparadas pela classe e magias já concedidas, todas
+   * juntas e separadas apenas pelo círculo. Uma magia concedida que também
+   * esteja preparada aparece uma vez só, pela fonte que a torna gratuita.
+   */
+  const idsConcedidos = new Set(linhasConcedidas.map((l) => l.spell.id))
+  const todasAsMagias: LinhaMagia[] = [
+    ...preparadas.filter((s) => !idsConcedidos.has(s.id)).map((s): LinhaMagia => ({ spell: s, origem: 'classe' })),
+    ...linhasConcedidas.filter((l) => l.spell.level > 0),
+  ]
 
   // ---------- Ações ----------
   /** Prepara uma magia numa vaga livre. */
@@ -267,70 +369,61 @@ export function SpellsTab({ char }: { char: Character }) {
       )}
 
       {/* --- Truques --- */}
-      {limiteTruques > 0 && (
-        <Card
-          title={`Truques (${truques.length}/${limiteTruques})`}
-          action={<button className="sm primary" onClick={() => setFolha('truques')}>Escolher</button>}
-        >
-          {truques.length === 0
-            ? <p className="muted tiny">Você ainda não escolheu nenhum truque.</p>
-            : truques.map((s) => (
-              <div className="list-item eq" key={s.id} onClick={() => setDetail(s.id)}>
-                <strong style={{ fontSize: '.92rem' }}>{s.name}</strong>
-                <div className="tiny muted">{resumoMagia(s)}</div>
-              </div>
-            ))}
-          <div className="tiny muted" style={{ marginTop: 8 }}>
-            Truques não gastam espaço de magia. Ao subir de nível você pode trocar um truque por outro.
-          </div>
-        </Card>
-      )}
+      {(limiteTruques > 0 || truquesConcedidos.length > 0) && cardTruques(limiteTruques, truques)}
 
-      {cardAutomaticas}
-
-      {/* --- Magias preparadas --- */}
+      {/* --- Lista única de magias, separada por círculo --- */}
       <Card
-        title={`Magias Preparadas (${preparadas.length}/${limitePreparadas})`}
+        title={`Magias (${todasAsMagias.length})`}
         action={<button className="sm primary" onClick={() => setFolha('preparar')}>Preparar</button>}
       >
         <div className="tiny muted" style={{ marginBottom: 10 }}>
-          <strong className="gold">{regra.quando}:</strong> {regra.quantas.toLowerCase()}. {regra.texto}
+          Preparadas pela classe: <strong className={excedente ? '' : 'gold'}>{preparadas.length}/{limitePreparadas}</strong>
+          <div style={{ marginTop: 4 }}>
+            <strong className="gold">{regra.quando}:</strong> {regra.quantas.toLowerCase()}. {regra.texto}
+          </div>
           {!trocaLivre && (
             <div style={{ marginTop: 4 }}>
               Trocas disponíveis agora: <strong className={trocasDisponiveis > 0 ? 'gold' : ''}>{trocasDisponiveis}</strong>
               {modo === 'descanso-uma' ? ' (recarrega no descanso longo)' : ' (concedida a cada nível)'}
             </div>
           )}
+          {todasAsMagias.some((l) => l.origem === 'sempre') && (
+            <div style={{ marginTop: 4 }}>
+              <strong className="gold">◆ sempre preparada</strong> vem de uma característica, gasta espaço
+              de magia normalmente e não conta no limite acima.
+            </div>
+          )}
+          {todasAsMagias.some((l) => l.origem === 'inata') && (
+            <div style={{ marginTop: 4 }}>
+              <strong className="gold">◈ sem espaço</strong> está sempre pronta e é conjurada de graça no
+              número de usos indicado — ou gastando um espaço de magia, se você tiver.
+            </div>
+          )}
         </div>
 
-        {preparadas.length === 0 && (
+        {todasAsMagias.length === 0 && (
           <p className="muted tiny">Nenhuma magia preparada — use o botão <strong>Preparar</strong>.</p>
         )}
 
         {ORDINAIS.map((titulo, lvl) => {
           if (lvl === 0) return null
-          const lista = preparadas.filter((s) => s.level === lvl).sort((a, b) => a.name.localeCompare(b.name))
+          const lista = todasAsMagias.filter((l) => l.spell.level === lvl).sort(ordenar)
           if (lista.length === 0) return null
           return (
             <div key={lvl}>
               <div className="spell-lvl">{titulo}</div>
-              {lista.map((s) => (
-                <div className="list-item eq" key={s.id}>
-                  <div className="spread">
-                    <div style={{ flex: 1 }} onClick={() => setDetail(s.id)}>
-                      <strong style={{ fontSize: '.92rem' }}>{s.name}</strong>
-                      <div className="tiny muted">{resumoMagia(s)}</div>
-                    </div>
-                    <button
-                      className="sm ghost"
-                      onClick={() => {
-                        if (trocaLivre) despreparar(s.id)
-                        else { setTrocando(s.id); setFolha('preparar') }
-                      }}
-                      disabled={!trocaLivre && trocasDisponiveis === 0}
-                    >{trocaLivre ? '✕' : '⇄'}</button>
-                  </div>
-                </div>
+              {lista.map((l) => renderLinha(
+                l,
+                l.origem === 'classe' ? (
+                  <button
+                    className="sm ghost"
+                    onClick={() => {
+                      if (trocaLivre) despreparar(l.spell.id)
+                      else { setTrocando(l.spell.id); setFolha('preparar') }
+                    }}
+                    disabled={!trocaLivre && trocasDisponiveis === 0}
+                  >{trocaLivre ? '✕' : '⇄'}</button>
+                ) : undefined,
               ))}
             </div>
           )
@@ -338,7 +431,7 @@ export function SpellsTab({ char }: { char: Character }) {
 
         {excedente && (
           <div className="banner warn">
-            ⚠ Você tem {preparadas.length} magias preparadas e o seu limite é {limitePreparadas}.
+            ⚠ Você tem {preparadas.length} magias preparadas pela classe e o seu limite é {limitePreparadas}.
             Use o ✕ para tirar as que sobram.
           </div>
         )}
@@ -361,8 +454,6 @@ export function SpellsTab({ char }: { char: Character }) {
           )}
         </Card>
       )}
-
-      {cardInatas}
 
       {/* ---------- Folha: preparar magias ---------- */}
       {folha === 'preparar' && (
