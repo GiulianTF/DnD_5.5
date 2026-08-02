@@ -23,6 +23,19 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '0.10.0',
+    date: '2026-08-02',
+    titulo: 'Passa a página',
+    resumo: 'Arraste para o lado para trocar de aba na ficha. Pedido de vocês, entregue. 👉',
+    destaques: [
+      { icone: '👉', texto: 'Arraste o conteúdo da ficha para o lado e troque de aba — Ficha, Perícias, Ações, Itens e Magias. Funciona nos dois sentidos.' },
+      { icone: '🫱', texto: 'O conteúdo acompanha o dedo enquanto você arrasta, e dá aquele efeito elástico quando não tem mais aba para aquele lado.' },
+      { icone: '⌨️', texto: 'No computador, as setas ← → do teclado fazem o mesmo. Trackpad com rolagem lateral também vale.' },
+      { icone: '🧭', texto: 'Abaixo das abas apareceu um atalho mostrando qual aba está de cada lado — é só tocar para ir direto.' },
+      { icone: '👀', texto: 'A barra de abas ficou com a letra maior e rola sozinha para manter a aba atual à vista em telas estreitas.' },
+    ],
+  },
+  {
     version: '0.9.0',
     date: '2026-08-02',
     titulo: 'Grimório arrumado',

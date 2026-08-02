@@ -20,6 +20,9 @@ import { ALL_ITEMS, ARMORS, MAGIC_ITEMS, itemById } from './data/equipment'
 import { FEATS, featById } from './data/feats'
 import { skillById } from './data/skills'
 import { APP_VERSION, PATCH_NOTES, formatarData, notaAtual } from './data/patch-notes'
+import {
+  FOLGA, LIMIAR, decidirTroca, definirEixo, deslocamento, proximoIndice,
+} from './engine/swipe'
 
 // Roda no Node via scripts/run-tests.cjs; o projeto não depende de @types/node.
 declare const process: { exitCode?: number }
@@ -669,6 +672,34 @@ delete (antiga as Partial<Character>).classChoices
 delete (antiga as Partial<Character>).originFeats
 ok(normalizeCharacter(antiga).originFeats.length === 0, 'normalizeCharacter preenche os campos que faltam')
 ok(characterFeats(antiga).length > 0 && armorClass(antiga).total > 0, 'ficha antiga continua calculando sem quebrar')
+
+console.log('\n== Gesto lateral entre as abas ==')
+// O gesto so vale quando e claramente horizontal: rolar a pagina nao pode trocar de aba.
+ok(definirEixo(40, 5) === 'horizontal', 'arrasto reto para o lado e horizontal')
+ok(definirEixo(5, 40) === 'vertical', 'arrasto reto para baixo e vertical (fica com a rolagem)')
+ok(definirEixo(30, 30) === 'vertical', 'na diagonal empatada a rolagem vence')
+ok(definirEixo(FOLGA - 1, 0) === 'indefinido', 'antes da folga o gesto ainda nao decidiu')
+ok(definirEixo(0, FOLGA - 1) === 'indefinido', 'movimento minusculo nao vira rolagem nem troca')
+ok(definirEixo(-40, 5) === 'horizontal', 'o eixo nao depende do sentido')
+
+// Os dois sentidos trocam de aba: para a esquerda avanca, para a direita volta.
+ok(decidirTroca(-LIMIAR, 300) === 1, 'arrastar para a esquerda traz a proxima aba')
+ok(decidirTroca(LIMIAR, 300) === -1, 'arrastar para a direita traz a aba anterior')
+ok(decidirTroca(-(LIMIAR - 1), 3000) === 0, 'arrasto curto e lento nao troca de aba')
+ok(decidirTroca(-30, 40) === 1, 'um piparote rapido troca mesmo sem chegar ao limiar')
+ok(decidirTroca(30, 40) === -1, 'o piparote tambem funciona no sentido contrario')
+ok(decidirTroca(0, 0) === 0, 'toque parado nao troca de aba')
+
+// Nas pontas o conteudo cede pouco — o elastico avisa que a lista acabou.
+ok(deslocamento(80, true, true) === 80, 'com vizinho dos dois lados o conteudo segue o dedo')
+ok(deslocamento(80, false, true) === 20, `sem aba anterior o arrasto e freado (${deslocamento(80, false, true)})`)
+ok(deslocamento(-80, true, false) === -20, 'sem proxima aba o arrasto tambem e freado')
+ok(deslocamento(-80, false, true) === -80, 'puxar para o lado que TEM aba nao e freado')
+
+// A navegacao nao circula: passar do fim nao volta para o comeco.
+ok(proximoIndice(0, -1, 5) === 0, 'na primeira aba, voltar nao sai do lugar')
+ok(proximoIndice(4, 1, 5) === 4, 'na ultima aba, avancar nao sai do lugar')
+ok(proximoIndice(2, 1, 5) === 3 && proximoIndice(2, -1, 5) === 1, 'no meio anda para os dois lados')
 
 console.log('\n== Notas de atualizacao ==')
 // A primeira entrada manda: e dela que scripts/versao.cjs tira a versao do app.
