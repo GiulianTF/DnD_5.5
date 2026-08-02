@@ -129,6 +129,17 @@ tenta('ItemsTab', () => renderToString(<ItemsTab char={guerreiro} />))
 tenta('SpellsTab (nao conjurador)', () => renderToString(<SpellsTab char={guerreiro} />))
 tenta('LevelUpWizard nv13', () => renderToString(<LevelUpWizard char={guerreiro} onClose={() => {}} />))
 
+// Abas com navegacao lateral: papeis de acessibilidade e atalho para as vizinhas.
+exige('CharacterSheet (abas navegaveis)',
+  () => renderToString(<CharacterSheet char={guerreiro} onBack={() => {}} />),
+  ['role="tablist"', 'role="tab"', 'role="tabpanel"', 'aria-selected="true"', 'aria-controls="painel-ficha"',
+    'Perícias ›',       // a aba seguinte fica a um clique (e a um arrasto)
+    'tab-panel'])
+// A ficha abre na primeira aba, entao nao ha vizinha a esquerda para oferecer.
+exige('CharacterSheet (primeira aba nao oferece anterior)',
+  () => renderToString(<CharacterSheet char={guerreiro} onBack={() => {}} />),
+  ['disabled'], ['‹ '])
+
 console.log('\n== Conjuradores ==')
 tenta('SpellsTab (mago nv11)', () => renderToString(<SpellsTab char={mago} />))
 tenta('ActionsTab (mago)', () => renderToString(<ActionsTab char={mago} />))

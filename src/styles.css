@@ -313,8 +313,51 @@ label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 5p
 .segmented { display: flex; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 3px; }
 .segmented button { flex: 1; border: none; background: none; min-height: 38px; border-radius: 8px; font-size: .82rem; }
 .segmented button.on { background: var(--red); }
-/* Barra com 5 abas: aperta a fonte para caber em telas estreitas */
-.segmented.tabs button { font-size: .7rem; padding: 0 2px; white-space: nowrap; }
+/* ---------- Abas da ficha, com navegação lateral ---------- */
+/*
+ * Cinco abas não cabem confortavelmente num celular estreito. Em vez de
+ * espremer a fonte até o texto virar risco, a barra rola na horizontal e a aba
+ * ativa é trazida para o centro; o gesto de arrastar o conteúdo continua sendo
+ * o caminho principal para trocar de aba.
+ */
+.segmented.tabs {
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+}
+.segmented.tabs::-webkit-scrollbar { display: none; }
+.segmented.tabs button { flex: 1 0 auto; font-size: .74rem; padding: 0 10px; white-space: nowrap; }
+
+/* Vizinhas de cada lado: no celular ensinam o gesto, no computador navegam. */
+.tab-nav {
+  display: flex; align-items: center; gap: 8px;
+  margin: 6px 2px 10px;
+  font-size: .7rem;
+}
+.tab-nav button {
+  background: none; border: none; padding: 2px 0; min-height: 0;
+  font-size: .7rem; color: var(--muted); white-space: nowrap;
+}
+.tab-nav button:disabled { opacity: 0; pointer-events: none; }
+.tab-nav button:first-child { text-align: left; }
+.tab-nav button:last-child { text-align: right; }
+.tab-nav > span { flex: 1; text-align: center; opacity: .65; }
+/* No celular a dica de teclado não faz sentido — sobra espaço para os vizinhos. */
+@media (max-width: 480px) { .tab-nav > span { font-size: 0; } .tab-nav > span::before { content: '⇄'; font-size: .8rem; } }
+
+/* `pan-y` entrega a rolagem vertical ao navegador e guarda a horizontal para nós. */
+/* `clip` não vira caixa de rolagem; `hidden` fica de reserva em navegadores antigos. */
+.tab-panel { touch-action: pan-y; overflow-x: hidden; overflow-x: clip; }
+.tab-conteudo.arrastando { will-change: transform; }
+.tab-conteudo.de-dir { animation: aba-da-dir .18s ease-out; }
+.tab-conteudo.de-esq { animation: aba-da-esq .18s ease-out; }
+@keyframes aba-da-dir { from { transform: translateX(28px); opacity: .3 } to { transform: none; opacity: 1 } }
+@keyframes aba-da-esq { from { transform: translateX(-28px); opacity: .3 } to { transform: none; opacity: 1 } }
+
+@media (prefers-reduced-motion: reduce) {
+  .segmented.tabs { scroll-behavior: auto; }
+  .tab-conteudo.de-dir, .tab-conteudo.de-esq { animation: none; }
+}
 
 .feature { border-left: 3px solid var(--gold); padding: 4px 0 4px 10px; margin-bottom: 12px; }
 .feature h4 { font-size: .92rem; }

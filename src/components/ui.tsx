@@ -13,6 +13,14 @@ export function ChoiceAccordion({ children }: { children: ReactNode }) {
   return <AccordionCtx.Provider value={{ aberta, abrir }}>{children}</AccordionCtx.Provider>
 }
 
+/*
+ * Quantas folhas estão abertas por cima do conteúdo. Quem escuta o teclado na
+ * página inteira (a navegação lateral entre as abas) consulta isto para não
+ * agir enquanto há um diálogo na frente do jogador.
+ */
+let folhasAbertas = 0
+export const temFolhaAberta = (): boolean => folhasAbertas > 0
+
 export function Sheet({ title, onClose, children, footer }: {
   title: string
   onClose: () => void
@@ -23,9 +31,11 @@ export function Sheet({ title, onClose, children, footer }: {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
+    folhasAbertas++
     return () => {
       window.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
+      folhasAbertas = Math.max(0, folhasAbertas - 1)
     }
   }, [onClose])
 

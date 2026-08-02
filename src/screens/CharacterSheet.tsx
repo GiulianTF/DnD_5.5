@@ -8,6 +8,7 @@ import { ItemsTab } from './tabs/ItemsTab'
 import { SpellsTab } from './tabs/SpellsTab'
 import { LevelUpWizard } from './LevelUpWizard'
 import { Card, Choice, ChoiceAccordion, ChoiceGroup, FeaturePickCard, Sheet } from '../components/ui'
+import { SwipeTabs, type SwipeTab } from '../components/SwipeTabs'
 import { useStore } from '../store/store'
 import {
   characterChoices, characterClasses, classEntries, classLabel, featurePickGroups, speciesLabel,
@@ -18,7 +19,7 @@ import { backgroundById } from '../data/backgrounds'
 
 type Tab = 'ficha' | 'pericias' | 'acoes' | 'itens' | 'magias'
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
+const TABS: SwipeTab<Tab>[] = [
   { id: 'ficha', label: 'Ficha', icon: '📜' },
   { id: 'pericias', label: 'Perícias', icon: '🎯' },
   { id: 'acoes', label: 'Ações', icon: '⚔' },
@@ -99,19 +100,15 @@ export function CharacterSheet({ char, onBack }: { char: Character; onBack: () =
         </button>
       </div>
 
-      <div className="segmented tabs" style={{ marginBottom: 12 }}>
-        {TABS.map((t) => (
-          <button key={t.id} className={tab === t.id ? 'on' : ''} onClick={() => setTab(t.id)}>
-            {t.icon} {t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'ficha' && <SheetTab char={char} />}
-      {tab === 'pericias' && <SkillsTab char={char} />}
-      {tab === 'acoes' && <ActionsTab char={char} />}
-      {tab === 'itens' && <ItemsTab char={char} />}
-      {tab === 'magias' && <SpellsTab char={char} />}
+      {/* Arrastar para o lado troca de aba nos dois sentidos; no computador,
+          as setas ← → e a rolagem horizontal do trackpad fazem o mesmo. */}
+      <SwipeTabs tabs={TABS} value={tab} onChange={setTab} travado={levelUp || editando}>
+        {tab === 'ficha' && <SheetTab char={char} />}
+        {tab === 'pericias' && <SkillsTab char={char} />}
+        {tab === 'acoes' && <ActionsTab char={char} />}
+        {tab === 'itens' && <ItemsTab char={char} />}
+        {tab === 'magias' && <SpellsTab char={char} />}
+      </SwipeTabs>
 
       {levelUp && <LevelUpWizard char={char} onClose={() => setLevelUp(false)} />}
 
