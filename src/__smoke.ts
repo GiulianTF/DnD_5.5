@@ -1,7 +1,7 @@
 // Teste de fumaça das regras. Executado via esbuild + node; não faz parte do app.
 import type { Character } from './types'
 import { RARITY_NAMES, RARITY_ORDER } from './types'
-import { newCharacter, normalizeCharacter } from './store/store'
+import { newCharacter, normalizeCharacter, useStore } from './store/store'
 import {
   armorClass, attackActions, characterFeats, maxHp, spellSlots, pactSlots, preparedLimit, cantripLimit,
   characterResources, innateSpells, levelUpSummary, finalAbilities, pendingChoices, saves, skillValues,
@@ -9,6 +9,7 @@ import {
   isProficientWithWeapon, preparableSpells, preparationMode, preparedSpellIds, proficiencyGroups,
   spellListClasses, armorTraining, classLabel, classLevel, featureOptionBlocked, featurePickGroups,
   isMulticlass, multiclassBlockers, multiclassOptions, proficiencyBonus, withLevelIn,
+  innateFreeUses, innateSpellResourceId, innateUsesLabel,
 } from './engine/rules'
 import { pagar, parseCost, purseInCopper } from './engine/money'
 import { CLASSES, classById } from './data/classes'
@@ -264,6 +265,47 @@ const gruposIniciado = spellPickGroups(iniciado)
 ok(gruposIniciado.length === 2, `Iniciado em Magia abre 2 grupos (${gruposIniciado.length})`)
 ok(gruposIniciado[0].pick.count === 2 && gruposIniciado[0].pick.spellLevel === 0, '2 truques')
 ok(gruposIniciado[1].pick.count === 1 && gruposIniciado[1].pick.spellLevel === 1, '1 magia de 1o circulo')
+
+// A magia de 1o circulo do talento fica sempre pronta e nao gasta espaco: 1 uso por descanso longo.
+const iniciadoEscolhido: Character = {
+  ...iniciado,
+  spellPicks: {
+    'iniciado-em-magia-truques': ['orientacao', 'chama-sagrada'],
+    'iniciado-em-magia-magia': ['bencao'],
+  },
+}
+const inatasIniciado = innateSpells(iniciadoEscolhido)
+const bencao = inatasIniciado.find((m) => m.spell.id === 'bencao')
+ok(!!bencao, 'a magia do Iniciado em Magia entra nas magias do personagem')
+ok(bencao!.freeUses === 'longo', 'a magia do talento tem uso gratuito por descanso longo')
+ok(innateFreeUses(iniciadoEscolhido, bencao!.freeUses) === 1,
+  `1 conjuracao gratuita (${innateFreeUses(iniciadoEscolhido, bencao!.freeUses)})`)
+ok(innateUsesLabel(iniciadoEscolhido, bencao!.freeUses) === '1×/descanso longo',
+  `rotulo dos usos: ${innateUsesLabel(iniciadoEscolhido, bencao!.freeUses)}`)
+const truqueIniciado = inatasIniciado.find((m) => m.spell.id === 'orientacao')
+ok(!!truqueIniciado && innateFreeUses(iniciadoEscolhido, truqueIniciado.freeUses) === 0,
+  'truque do talento e a vontade, sem usos para marcar')
+// Os usos gastos moram em `resourcesUsed`, entao o descanso longo (que zera o registro) os devolve.
+ok(innateSpellResourceId('bencao') === 'magia-inata:bencao',
+  `chave dos usos gratuitos: ${innateSpellResourceId('bencao')}`)
+ok(!characterResources(iniciadoEscolhido).some((r) => r.id === innateSpellResourceId('bencao')),
+  'usos de magia inata nao aparecem entre os recursos da ficha')
+// O drow tem PB usos de Falar com Animais quando a linhagem concede 'prof-longo'.
+ok(innateFreeUses(drowGuerreiro, 'prof-longo') === proficiencyBonus(drowGuerreiro.level),
+  `'prof-longo' vale o bonus de proficiencia (${innateFreeUses(drowGuerreiro, 'prof-longo')})`)
+
+// O uso gratuito sobrevive ao descanso curto e volta no longo.
+const chaveBencao = innateSpellResourceId('bencao')
+useStore.setState({ characters: [], activeId: null })
+useStore.getState().addCharacter(iniciadoEscolhido)
+const usosDe = (id: string) => useStore.getState().characters.find((c) => c.id === id)?.resourcesUsed[chaveBencao] ?? 0
+useStore.getState().useResource(iniciadoEscolhido.id, chaveBencao, 1)
+ok(usosDe(iniciadoEscolhido.id) === 1, 'marcar o uso gratuito registra 1 conjuracao gasta')
+useStore.getState().shortRest(iniciadoEscolhido.id)
+ok(usosDe(iniciadoEscolhido.id) === 1, 'descanso curto NAO devolve o uso gratuito')
+useStore.getState().longRest(iniciadoEscolhido.id)
+ok(usosDe(iniciadoEscolhido.id) === 0, 'descanso longo devolve o uso gratuito')
+useStore.setState({ characters: [], activeId: null })
 
 // Estilo de Luta Combatente Abencoado (Paladino, nivel 2): 2 truques de Clerigo.
 const abencoado: Character = newCharacter({

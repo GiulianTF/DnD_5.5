@@ -32,6 +32,22 @@ const tenta = (nome: string, fn: () => string) => {
   }
 }
 
+/** Como `tenta`, mas exige que o HTML contenha (e não contenha) certos trechos. */
+const exige = (nome: string, fn: () => string, contem: string[], naoContem: string[] = []) => {
+  try {
+    const html = fn()
+    const faltando = contem.filter((t) => !html.includes(t))
+    const sobrando = naoContem.filter((t) => html.includes(t))
+    if (faltando.length || sobrando.length) {
+      falhas++
+      console.log(`  X ${nome}: falta [${faltando.join(', ')}] sobra [${sobrando.join(', ')}]`)
+    } else console.log(`  . ${nome}`)
+  } catch (e) {
+    falhas++
+    console.log(`  X ${nome}: ${(e as Error).message}`)
+  }
+}
+
 // Personagem completo: guerreiro nv12 com equipamento, itens magicos e subclasse
 const guerreiro: Character = newCharacter({
   name: 'Thalia', classId: 'guerreiro', speciesId: 'anao', backgroundId: 'soldado',
@@ -173,6 +189,42 @@ const drow: Character = newCharacter({
   hpRolls: [null, null, null, null],
 })
 tenta('SpellsTab (guerreiro drow: magias de especie)', () => renderToString(<SpellsTab char={drow} />))
+
+// Lista unica: magias de classe, de subclasse e de talento no mesmo cartao, por circulo.
+const clerigoIniciado: Character = newCharacter({
+  name: 'Miri', classId: 'clerigo', speciesId: 'humano', backgroundId: 'acolito', level: 5,
+  subclassId: 'vida', classChoices: { 'ordem-divina': 'protetor' },
+  originFeats: ['iniciado-em-magia'],
+  hpRolls: Array(4).fill(null),
+  spellsKnown: ['chama-sagrada', 'orientacao', 'comando'],
+  spellsPrepared: ['comando'],
+  spellPicks: { 'iniciado-em-magia-truques': ['reparar', 'luz'], 'iniciado-em-magia-magia': ['escudo-da-fe'] },
+})
+exige('SpellsTab (lista unica: classe + dominio + talento)',
+  () => renderToString(<SpellsTab char={clerigoIniciado} />),
+  [
+    'Comando',            // preparada pela classe
+    'Curar Ferimentos',   // sempre preparada pelo Dominio da Vida
+    'Escudo da F',        // magia do talento, conjurada sem gastar espaco
+    'sempre preparada', 'sem espa',
+    '1º Nível', '2º Nível',
+    'Uso gratuito 1 de Escudo da Fé',   // marcador do uso por descanso longo
+  ],
+  // A separacao por cartoes de origem sumiu: tudo vive na lista unica.
+  ['Magias de Espécie e Talentos', 'Magias Sempre Preparadas'])
+
+// A mesma magia vinda do dominio E do talento aparece uma unica vez.
+const clerigoBencaoDupla: Character = {
+  ...clerigoIniciado,
+  spellPicks: { ...clerigoIniciado.spellPicks, 'iniciado-em-magia-magia': ['bencao'] },
+}
+tenta('SpellsTab (Bencao pelo dominio e pelo talento)', () => {
+  const html = renderToString(<SpellsTab char={clerigoBencaoDupla} />)
+  const vezes = html.split('>Bênção<').length - 1
+  if (vezes !== 1) throw new Error(`Bencao aparece ${vezes}x na lista (esperado 1)`)
+  if (!html.includes('Iniciado em Magia')) throw new Error('a origem do talento sumiu do rotulo')
+  return html
+})
 tenta('SheetTab (guerreiro drow: linhagem na ficha)', () => renderToString(<SheetTab char={drow} />))
 tenta('CharacterSheet (guerreiro drow)', () => renderToString(<CharacterSheet char={drow} onBack={() => {}} />))
 tenta('CharacterSheet (editar escolhas)', () => renderToString(<CharacterSheet char={goliasPendente} onBack={() => {}} />))
