@@ -9,15 +9,17 @@ import { SPELLS } from '../data/spells'
 import { ORIGIN_FEATS, featById } from '../data/feats'
 import { WEAPONS, ARMORS, SHIELD, GEAR, MASTERY_DESC, itemById } from '../data/equipment'
 import {
-  PREPARATION_RULES, abilityMod, fmtMod, cantripLimit, innateSpells, preparationMode, preparedLimit,
-  maxSpellLevel, masteryEligibleWeapons, spellPickGroups,
+  PREPARATION_RULES, abilityMod, fmtMod, cantripLimit, featurePickGroups, innateSpells,
+  preparationMode, preparedLimit, maxSpellLevel, masteryEligibleWeapons, spellPickGroups,
 } from '../engine/rules'
 import { POINT_BUY_COST, STANDARD_ARRAY, emptyScores, pointBuyRemaining } from '../engine/pointbuy'
 import { roll4d6DropLowest } from '../engine/dice'
 import { purseFromGold } from '../engine/money'
 import { uid } from '../engine/uid'
 import { newCharacter, useStore } from '../store/store'
-import { Card, Choice, ChoiceAccordion, ChoiceGroup, Segmented, SpellText } from '../components/ui'
+import {
+  Card, Choice, ChoiceAccordion, ChoiceGroup, FeaturePickCard, Segmented, SpellText,
+} from '../components/ui'
 
 const STEPS = ['Identidade', 'Espécie', 'Antecedente', 'Classe', 'Atributos', 'Perícias', 'Magias', 'Equipamento'] as const
 
@@ -42,6 +44,8 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
   const [bgFree, setBgFree] = useState(false)
   const [classId, setClassId] = useState('')
   const [classChoices, setClassChoices] = useState<Record<string, string>>({})
+  /** Invocações Místicas do Bruxo e outras escolhas de característica do 1º nível */
+  const [featureChoices, setFeatureChoices] = useState<Record<string, string[]>>({})
   const [masteries, setMasteries] = useState<string[]>([])
   const [method, setMethod] = useState<AbilityMethod>('array')
   const [scores, setScores] = useState<AbilityScores>(emptyScores(8))
@@ -76,10 +80,26 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
   const draft: Character = useMemo(
     () => newCharacter({
       classId, level: 1, speciesId, backgroundId, baseAbilities: scores, backgroundBonuses: bgBonuses,
-      speciesChoices, classChoices, originFeats, spellPicks: picks,
+      speciesChoices, classChoices, originFeats, spellPicks: picks, featureChoices,
     }),
-    [classId, speciesId, backgroundId, scores, bgBonuses, speciesChoices, classChoices, originFeats, picks],
+    [classId, speciesId, backgroundId, scores, bgBonuses, speciesChoices, classChoices, originFeats, picks, featureChoices],
   )
+
+  /*
+   * Características que já pedem escolha no 1º nível — hoje as Invocações
+   * Místicas do Bruxo, que incluem os Pactos da Lâmina, da Corrente e do Tomo.
+   */
+  const gruposDeFeature = classId ? featurePickGroups(draft).filter((g) => g.count > 0) : []
+  const featuresOk = gruposDeFeature.every((g) => !g.pending)
+
+  const toggleFeature = (grupoId: string, optionId: string, limite: number) => {
+    setFeatureChoices((atual) => {
+      const lista = atual[grupoId] ?? []
+      if (lista.includes(optionId)) return { ...atual, [grupoId]: lista.filter((x) => x !== optionId) }
+      if (lista.length >= limite) return atual
+      return { ...atual, [grupoId]: [...lista, optionId] }
+    })
+  }
 
   // Maestria em Armas (Guerreiro 3 no nível 1; Bárbaro, Paladino, Patrulheiro e Ladino 2)
   const masteryNeeded = cls?.masteryCount?.(1) ?? 0
@@ -145,7 +165,8 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
       case 0: return name.trim().length > 0
       case 1: return especieOk
       case 2: return bgOk
-      case 3: return !!cls && classGroups.every((g) => !!classChoices[g.id]) && masteries.length === masteryNeeded
+      case 3: return !!cls && classGroups.every((g) => !!classChoices[g.id])
+        && masteries.length === masteryNeeded && featuresOk
       case 4: return methodComplete()
       case 5: return escolhidasDaClasse === (cls?.skillCount ?? 0)
       case 6: return cantrips.length === cantripsNeeded
@@ -196,6 +217,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
       freeBackgroundBonuses: bgFree,
       classId,
       classChoices,
+      featureChoices,
       weaponMasteries: masteries,
       level: 1,
       abilityMethod: method,
@@ -461,6 +483,7 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
                   setCantrips([])
                   setSpells([])
                   setClassChoices({})
+                  setFeatureChoices({})
                   setMasteries([])
                   setClassEquipId('')
                 }}
@@ -477,6 +500,15 @@ export function CharacterCreator({ onDone, onCancel }: { onDone: () => void; onC
               group={g}
               value={classChoices[g.id]}
               onChange={(optionId) => setClassChoices({ ...classChoices, [g.id]: optionId })}
+            />
+          ))}
+
+          {/* Invocações Místicas do Bruxo (com os Pactos) e afins, já no nível 1 */}
+          {gruposDeFeature.map((g) => (
+            <FeaturePickCard
+              key={g.pick.id}
+              grupo={g}
+              onToggle={(optionId) => toggleFeature(g.pick.id, optionId, g.count)}
             />
           ))}
 

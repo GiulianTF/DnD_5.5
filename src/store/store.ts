@@ -6,7 +6,7 @@ import { emptyPurse, purseFromGold } from '../engine/money'
 import { classById } from '../data/classes'
 import { rollHitDie } from '../engine/dice'
 import { uid } from '../engine/uid'
-import { abilityMods, characterResources, maxHp, preparationMode } from '../engine/rules'
+import { abilityMods, characterResources, maxHp, pactSlots, preparationMode } from '../engine/rules'
 
 export const newCharacter = (partial: Partial<Character> = {}): Character => ({
   id: uid(),
@@ -22,6 +22,7 @@ export const newCharacter = (partial: Partial<Character> = {}): Character => ({
   asiChoices: [],
   speciesChoices: {},
   classChoices: {},
+  featureChoices: {},
   originFeats: [],
   weaponMasteries: [],
   damageTaken: 0,
@@ -52,6 +53,10 @@ export const normalizeCharacter = (c: Character): Character => ({
   ...c,
   speciesChoices: c.speciesChoices ?? {},
   classChoices: c.classChoices ?? {},
+  featureChoices: c.featureChoices ?? {},
+  // Fichas de uma classe só ganham a lista de classes explícita ao carregar.
+  classes: c.classes?.length ? c.classes : [{ classId: c.classId, subclassId: c.subclassId, level: c.level }],
+  levelClasses: c.levelClasses?.length ? c.levelClasses : Array.from({ length: Math.max(1, c.level) }, () => c.classId),
   originFeats: c.originFeats ?? [],
   weaponMasteries: c.weaponMasteries ?? [],
   asiChoices: c.asiChoices ?? [],
@@ -98,7 +103,8 @@ interface AppState {
   setTempHp: (id: string, amount: number) => void
   shortRest: (id: string) => void
   longRest: (id: string) => void
-  spendHitDie: (id: string) => number | null
+  /** `die` permite escolher o Dado de Vida numa ficha multiclasse (d10, d8...) */
+  spendHitDie: (id: string, die?: number) => number | null
 }
 
 export const useStore = create<AppState>()(
@@ -176,11 +182,10 @@ export const useStore = create<AppState>()(
             // Recursos de descanso longo que devolvem alguns usos no curto (Retomar o Fôlego)
             else if (r.shortRestUses) used[r.id] = Math.max(0, (used[r.id] ?? 0) - r.shortRestUses)
           }
-          // Bruxo recupera espaços de Pacto em descanso curto
-          const cls = classById(c.classId)
+          // Bruxo recupera espaços de Pacto em descanso curto — inclusive multiclasse
           return {
             resourcesUsed: used,
-            pactSlotsSpent: cls?.caster === 'pacto' ? 0 : c.pactSlotsSpent,
+            pactSlotsSpent: pactSlots(c) ? 0 : c.pactSlotsSpent,
           }
         }),
 
@@ -202,13 +207,14 @@ export const useStore = create<AppState>()(
           }
         }),
 
-      spendHitDie: (id) => {
+      spendHitDie: (id, die) => {
         const char = get().characters.find((c) => c.id === id)
         if (!char) return null
         if (char.hitDiceSpent >= char.level) return null
-        const cls = classById(char.classId)
-        if (!cls) return null
-        const rolled = rollHitDie(cls.hitDie)
+        // Sem escolha explícita, usa o dado da classe inicial.
+        const lados = die ?? classById(char.classId)?.hitDie
+        if (!lados) return null
+        const rolled = rollHitDie(lados)
         const healed = Math.max(1, rolled + abilityMods(char).con)
         get().updateCharacter(id, (c) => ({
           hitDiceSpent: c.hitDiceSpent + 1,

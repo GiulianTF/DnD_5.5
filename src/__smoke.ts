@@ -7,7 +7,8 @@ import {
   characterResources, innateSpells, levelUpSummary, finalAbilities, pendingChoices, saves, skillValues,
   speciesLabel, spellcasting, spellPickGroups, alwaysPreparedSpells, isProficientWithArmor, maxSpellLevel,
   isProficientWithWeapon, preparableSpells, preparationMode, preparedSpellIds, proficiencyGroups,
-  spellListClasses,
+  spellListClasses, armorTraining, classLabel, classLevel, featureOptionBlocked, featurePickGroups,
+  isMulticlass, multiclassBlockers, multiclassOptions, proficiencyBonus, withLevelIn,
 } from './engine/rules'
 import { pagar, parseCost, purseInCopper } from './engine/money'
 import { CLASSES, classById } from './data/classes'
@@ -491,6 +492,132 @@ const trapaceiro: Character = newCharacter({
 ok(alwaysPreparedSpells(trapaceiro).some((m) => m.spell.id === 'maos-magicas'),
   'Trapaceiro Arcano sempre tem Maos Magicas')
 ok(cantripLimit(trapaceiro) + 1 === 3, 'Trapaceiro Arcano: 2 truques a escolher + Maos Magicas = 3')
+
+console.log('\n== Invocacoes Misticas do Bruxo (com os Pactos) ==')
+const bruxo1: Character = newCharacter({ classId: 'bruxo', level: 1 })
+const invocacoes = featurePickGroups(bruxo1).find((g) => g.pick.id === 'invocacoes-misticas')
+ok(!!invocacoes, 'Bruxo nv1 ja tem o grupo de Invocacoes Misticas')
+ok(invocacoes?.count === 1, `1 invocacao no nivel 1 (${invocacoes?.count})`)
+ok(['pacto-da-lamina', 'pacto-da-corrente', 'pacto-do-tomo']
+  .every((id) => invocacoes!.options.some((o) => o.id === id)), 'os tres Pactos aparecem entre as opcoes')
+ok(invocacoes!.pending, 'com nada escolhido o grupo fica pendente')
+ok(!invocacoes!.options.some((o) => o.id === 'lamina-sedenta'),
+  'invocacoes de nivel alto nao aparecem no nivel 1')
+const bruxo5 = newCharacter({
+  classId: 'bruxo', level: 5, hpRolls: [null, null, null, null],
+  featureChoices: { 'invocacoes-misticas': ['pacto-da-lamina', 'visao-diabolica', 'explosao-agonizante'] },
+})
+const inv5 = featurePickGroups(bruxo5).find((g) => g.pick.id === 'invocacoes-misticas')!
+ok(inv5.count === 5, `5 invocacoes no nivel 5 (${inv5.count})`)
+ok(inv5.options.some((o) => o.id === 'lamina-sedenta'), 'Lamina Sedenta liberada no nivel 5')
+ok(!inv5.options.some((o) => o.id === 'lamina-devoradora'), 'Lamina Devoradora so no nivel 12')
+ok(!featureOptionBlocked(inv5.options.find((o) => o.id === 'lamina-sedenta')!, inv5.chosen),
+  'Lamina Sedenta liberada porque o Pacto da Lamina esta escolhido')
+ok(featureOptionBlocked(inv5.options.find((o) => o.id === 'lamina-sedenta')!, ['visao-diabolica']),
+  'sem o Pacto da Lamina, a Lamina Sedenta fica bloqueada')
+
+console.log('\n== Manobras do Mestre de Batalha ==')
+const mestre: Character = newCharacter({
+  classId: 'guerreiro', level: 3, subclassId: 'mestre-de-batalha', hpRolls: [null, null],
+})
+const manobras = featurePickGroups(mestre).find((g) => g.pick.id === 'manobras')
+ok(!!manobras, 'escolher Mestre de Batalha ja libera o grupo de Manobras')
+ok(manobras?.count === 3, `3 manobras no nivel 3 (${manobras?.count})`)
+ok(manobras?.die === 'd8', `Dado de Superioridade d8 no nivel 3 (${manobras?.die})`)
+ok(manobras?.resourceId === 'dados-de-superioridade', 'as manobras gastam Dados de Superioridade')
+const dadosSup = characterResources(mestre).find((r) => r.id === 'dados-de-superioridade')
+ok(dadosSup?.max === 4, `4 Dados de Superioridade no nivel 3 (${dadosSup?.max})`)
+ok(dadosSup?.recharge === 'curto', 'os Dados de Superioridade voltam em descanso curto')
+const mestre10 = newCharacter({
+  classId: 'guerreiro', level: 10, subclassId: 'mestre-de-batalha', hpRolls: Array(9).fill(null),
+})
+const manobras10 = featurePickGroups(mestre10).find((g) => g.pick.id === 'manobras')!
+ok(manobras10.count === 7 && manobras10.die === 'd10', 'nivel 10: 7 manobras e dado d10')
+const campeao = newCharacter({ classId: 'guerreiro', level: 3, subclassId: 'campeao', hpRolls: [null, null] })
+ok(!featurePickGroups(campeao).some((g) => g.pick.id === 'manobras'), 'Campeao nao tem Manobras')
+
+console.log('\n== Assistente de evolucao: subclasse ja libera as escolhas dela ==')
+const guerreiro2: Character = newCharacter({ classId: 'guerreiro', level: 2, hpRolls: [null] })
+const rMestre = levelUpSummary(guerreiro2, 3, 'guerreiro')!
+ok(rMestre.needsSubclass, 'nivel 3 de Guerreiro pede a subclasse')
+// É o que o assistente faz ao clicar em "Mestre de Batalha": o rascunho ja tem a subclasse.
+const draftMestre = withLevelIn(guerreiro2, 'guerreiro', 'mestre-de-batalha')
+const manobrasNoWizard = featurePickGroups(draftMestre).find((g) => g.pick.id === 'manobras')
+ok(!!manobrasNoWizard && manobrasNoWizard.pending && manobrasNoWizard.count === 3,
+  'escolher Mestre de Batalha no assistente ja pede as 3 manobras')
+ok(!featurePickGroups(withLevelIn(guerreiro2, 'guerreiro', 'campeao')).some((g) => g.pick.id === 'manobras'),
+  'escolher Campeao nao pede manobras')
+// Bruxo 1 -> 2: o total de invocacoes vai de 1 para 3, entao faltam 2.
+const bruxoSubindo = withLevelIn(
+  newCharacter({ classId: 'bruxo', level: 1, featureChoices: { 'invocacoes-misticas': ['pacto-do-tomo'] } }),
+  'bruxo',
+)
+const invSubindo = featurePickGroups(bruxoSubindo).find((g) => g.pick.id === 'invocacoes-misticas')!
+ok(invSubindo.count === 3 && invSubindo.chosen.length === 1 && invSubindo.pending,
+  'subir para Bruxo 2 pede 2 invocacoes novas e mantem a ja escolhida')
+
+console.log('\n== Metamagia e Canalizar Divindade ==')
+const feiticeiro = newCharacter({ classId: 'feiticeiro', level: 2, hpRolls: [null] })
+const metamagia = featurePickGroups(feiticeiro).find((g) => g.pick.id === 'metamagia')!
+ok(metamagia.count === 2, `2 opcoes de Metamagia no nivel 2 (${metamagia.count})`)
+ok(metamagia.options.find((o) => o.id === 'acelerada')?.cost === 2,
+  'Magia Acelerada custa 2 Pontos de Feiticaria')
+const clerigoCD = newCharacter({ classId: 'clerigo', level: 3, subclassId: 'vida', hpRolls: [null, null] })
+const gruposCD = featurePickGroups(clerigoCD).filter((g) => g.resourceId === 'canalizar-divindade')
+ok(gruposCD.length === 2, 'Clerigo nv3 tem as opcoes basicas de Canalizar Divindade e a do dominio')
+ok(gruposCD.every((g) => !g.pending), 'opcoes concedidas nao geram escolha pendente')
+ok(gruposCD.some((g) => g.active.some((o) => o.id === 'preservar-a-vida')),
+  'Dominio da Vida traz Preservar a Vida como uso de Canalizar Divindade')
+
+console.log('\n== Multiclasse ==')
+const gm: Character = newCharacter({
+  classId: 'guerreiro', level: 5, hpRolls: [null, null, null, null],
+  baseAbilities: { for: 15, des: 14, con: 14, int: 10, sab: 10, car: 15 },
+})
+const gmBruxo = withLevelIn(gm, 'bruxo')
+ok(gmBruxo.level === 6, `nivel total 6 (${gmBruxo.level})`)
+ok(classLevel(gmBruxo, 'guerreiro') === 5 && classLevel(gmBruxo, 'bruxo') === 1,
+  'Guerreiro 5 / Bruxo 1')
+ok(classLabel(gmBruxo) === 'Guerreiro 5 / Bruxo 1', `rotulo "${classLabel(gmBruxo)}"`)
+ok(isMulticlass(gmBruxo), 'a ficha passa a ser multiclasse')
+ok(proficiencyBonus(gmBruxo.level) === 3, 'bonus de proficiencia pelo nivel TOTAL')
+// PV: 5 niveis de d10 + 1 de d8, todos com +2 de CON
+ok(maxHp(gmBruxo) === maxHp(gm) + 5 + 2, `o nivel de Bruxo soma a media do d8 + CON (${maxHp(gmBruxo)})`)
+ok(pactSlots(gmBruxo)?.count === 1, 'ganha 1 espaco de Pacto de Bruxo 1')
+ok(saves(gmBruxo).find((s) => s.ability === 'for')!.proficient,
+  'salvaguardas continuam sendo as da classe inicial')
+ok(!saves(gmBruxo).find((s) => s.ability === 'car')!.proficient,
+  'a classe nova NAO concede salvaguardas novas')
+ok(cantripLimit(gmBruxo) === 2, `2 truques de Bruxo (${cantripLimit(gmBruxo)})`)
+ok(spellListClasses(gmBruxo).includes('bruxo'), 'a lista de Bruxo passa a valer')
+
+const magoPaladino = withLevelIn(
+  newCharacter({ classId: 'mago', level: 6, hpRolls: Array(5).fill(null) }), 'paladino',
+)
+// Nivel de conjurador = 6 (mago) + 0 (paladino 1, metade arredondada para baixo)
+ok(spellSlots(magoPaladino)[2] === 3 && spellSlots(magoPaladino)[3] === 0,
+  'Mago 6 / Paladino 1 mantem os espacos de conjurador 6')
+const magoPal2 = withLevelIn(magoPaladino, 'paladino')
+// Nivel de conjurador = 6 + 1 = 7
+ok(spellSlots(magoPal2)[3] === 1 && spellSlots(magoPal2)[0] === 4,
+  'Paladino 2 sobe o nivel de conjurador para 7')
+ok((preparedLimit(magoPal2) ?? 0) > (preparedLimit(magoPaladino) ?? 0),
+  'o limite de preparadas soma o das duas classes')
+
+const fraco = newCharacter({
+  classId: 'guerreiro', level: 3, hpRolls: [null, null],
+  baseAbilities: { for: 15, des: 10, con: 12, int: 10, sab: 10, car: 10 },
+})
+ok(multiclassBlockers(fraco, 'mago').includes('int'), 'Mago exige INT 13 para multiclassear')
+ok(multiclassBlockers(fraco, 'barbaro').length === 0, 'Barbaro liberado com FOR 15')
+const opcoes = multiclassOptions(fraco)
+ok(opcoes.find((o) => o.cls.id === 'guerreiro')!.jaTem, 'a classe atual aparece como ja possuida')
+ok(opcoes.find((o) => o.cls.id === 'mago')!.faltando.length > 0, 'Mago aparece bloqueado')
+const guerreiroBruxoProf = withLevelIn(gm, 'bruxo')
+ok(!armorTraining(guerreiroBruxoProf).includes('Pesada') === false,
+  'o Guerreiro inicial mantem armadura Pesada')
+ok(featurePickGroups(guerreiroBruxoProf).some((g) => g.pick.id === 'invocacoes-misticas'),
+  'o nivel 1 de Bruxo ja pede a Invocacao Mistica')
 
 console.log('\n== Fichas antigas (sem os campos novos) ==')
 const antiga = JSON.parse(JSON.stringify(newCharacter({ classId: 'guerreiro' }))) as Character

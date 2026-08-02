@@ -1,10 +1,11 @@
 import type {
-  AbilityKey, AbilityScores, AlwaysPreparedSpell, Character, ChoiceOption, InnateSpell, Item,
-  InventoryEntry, OptionGroup, PreparationMode, Spell, SpellPick, Subclass,
+  AbilityKey, AbilityScores, AlwaysPreparedSpell, Character, ChoiceOption, ClassEntry, DndClass,
+  FeatureOption, FeaturePick, InnateSpell, Item, InventoryEntry, OptionGroup, PreparationMode,
+  Spell, SpellPick, Subclass,
 } from '../types'
 import { ABILITIES } from '../types'
 import {
-  classById, FULL_CASTER_SLOTS, HALF_CASTER_SLOTS, PACT_SLOTS, THIRD_CASTER_SLOTS,
+  CLASSES, classById, FULL_CASTER_SLOTS, HALF_CASTER_SLOTS, PACT_SLOTS, THIRD_CASTER_SLOTS,
 } from '../data/classes'
 import { speciesById } from '../data/species'
 import { backgroundById } from '../data/backgrounds'
@@ -18,9 +19,125 @@ export const fmtMod = (n: number) => (n >= 0 ? `+${n}` : `${n}`)
 
 export const proficiencyBonus = (level: number) => 2 + Math.floor((level - 1) / 4)
 
-/** A subclasse escolhida, quando já existe. */
-export const subclassOf = (char: Character): Subclass | null =>
-  classById(char.classId)?.subclasses.find((s) => s.id === char.subclassId) ?? null
+// ---------- Multiclasse ----------
+/**
+ * Uma classe do personagem já resolvida: a entrada da ficha, os dados da classe
+ * e a subclasse escolhida nela. A classe inicial (`primary`) é a que define as
+ * salvaguardas e o equipamento inicial.
+ */
+export interface ResolvedClass {
+  entry: ClassEntry
+  cls: DndClass
+  subclass: Subclass | null
+  primary: boolean
+}
+
+/**
+ * Níveis por classe. Fichas de uma classe só não têm o campo `classes` — nesse
+ * caso ele é derivado de `classId`/`level`. Se a soma não bater com o nível
+ * total (o nível também pode ser ajustado à mão), a classe inicial absorve a
+ * diferença, para nunca existir ficha com nível "perdido".
+ */
+export function classEntries(char: Character): ClassEntry[] {
+  const total = Math.max(1, char.level)
+  const bruto = (char.classes ?? []).filter((e) => e.level > 0 && !!classById(e.classId))
+  if (!bruto.length) return [{ classId: char.classId, subclassId: char.subclassId, level: total }]
+
+  const lista = bruto.map((e) => ({ ...e }))
+  const dif = total - lista.reduce((a, e) => a + e.level, 0)
+  if (dif !== 0) {
+    const i = Math.max(0, lista.findIndex((e) => e.classId === char.classId))
+    lista[i] = { ...lista[i], level: Math.max(1, lista[i].level + dif) }
+  }
+  return lista.filter((e) => e.level > 0)
+}
+
+export function characterClasses(char: Character): ResolvedClass[] {
+  // Uma ficha em construção pode não ter classe ainda — ela simplesmente não entra.
+  const entradas = classEntries(char).filter((e) => !!classById(e.classId))
+  if (!entradas.length) return []
+  const idPrincipal = entradas.some((e) => e.classId === char.classId) ? char.classId : entradas[0].classId
+  let principalUsada = false
+  return entradas.map((entry) => {
+    const cls = classById(entry.classId)!
+    const primary = !principalUsada && entry.classId === idPrincipal
+    if (primary) principalUsada = true
+    return {
+      entry,
+      cls,
+      subclass: cls.subclasses.find((s) => s.id === entry.subclassId) ?? null,
+      primary,
+    }
+  })
+}
+
+/** A classe inicial já resolvida — a que manda em salvaguardas e equipamento. */
+export const primaryClass = (char: Character): ResolvedClass | undefined => {
+  const classes = characterClasses(char)
+  return classes.find((c) => c.primary) ?? classes[0]
+}
+
+/** Nível do personagem numa classe específica (0 se ele não tem essa classe). */
+export const classLevel = (char: Character, classId: string): number =>
+  classEntries(char).find((e) => e.classId === classId)?.level ?? 0
+
+export const isMulticlass = (char: Character): boolean => classEntries(char).length > 1
+
+/** "Guerreiro 5 / Bruxo 3" — o rótulo usado no cabeçalho da ficha. */
+export const classLabel = (char: Character): string =>
+  characterClasses(char).map((c) => `${c.cls.name} ${c.entry.level}`).join(' / ')
+
+/**
+ * Classe ganha em cada nível de personagem (índice 0 = nível 1). Fichas antigas
+ * não guardam isso: reconstruímos assumindo que os níveis de cada classe foram
+ * tomados em blocos, na ordem em que as classes entraram na ficha.
+ */
+export function levelClassIds(char: Character): string[] {
+  const total = Math.max(1, char.level)
+  const salvo = char.levelClasses ?? []
+  if (salvo.length >= total && salvo.every((id) => !!classById(id))) return salvo.slice(0, total)
+
+  const out: string[] = []
+  for (const { entry } of characterClasses(char)) {
+    for (let i = 0; i < entry.level; i++) out.push(entry.classId)
+  }
+  // Preserva o que já estava salvo nos níveis iniciais, se for coerente.
+  for (let i = 0; i < Math.min(salvo.length, out.length); i++) {
+    if (classById(salvo[i]) && classLevel(char, salvo[i]) > 0) out[i] = salvo[i]
+  }
+  return out.slice(0, total)
+}
+
+/** Requisitos de habilidade para entrar numa classe por multiclasse (PHB 2024). */
+export function multiclassBlockers(char: Character, classId: string): AbilityKey[] {
+  const req = classById(classId)?.multiclassReq
+  if (!req) return []
+  const abs = finalAbilities(char)
+  const faltando: AbilityKey[] = []
+  for (const k of req.all ?? []) if (abs[k] < 13) faltando.push(k)
+  if (req.any?.length && !req.any.some((k) => abs[k] >= 13)) faltando.push(...req.any)
+  return [...new Set(faltando)]
+}
+
+/**
+ * Classes às quais o personagem pode adicionar um nível agora. Para entrar numa
+ * classe nova o PHB 2024 exige 13 na habilidade da classe que você já tem E na
+ * da classe nova — por isso os dois requisitos entram em `faltando`.
+ */
+export function multiclassOptions(char: Character) {
+  const atuais = new Set(classEntries(char).map((e) => e.classId))
+  const requisitoAtual = classEntries(char).flatMap((e) => multiclassBlockers(char, e.classId))
+  return CLASSES.map((cls) => ({
+    cls,
+    jaTem: atuais.has(cls.id),
+    faltando: atuais.has(cls.id)
+      ? []
+      : [...new Set([...requisitoAtual, ...multiclassBlockers(char, cls.id)])],
+  }))
+}
+
+/** A subclasse da classe inicial — usada por tudo que não é multiclasse-aware. */
+export const subclassOf = (char: Character): Subclass | null => primaryClass(char)?.subclass ?? null
 
 // ---------- Escolhas de espécie, de classe e de subclasse ----------
 /** Um grupo de escolha junto com a opção que o personagem selecionou (se houver). */
@@ -28,21 +145,52 @@ export interface ResolvedChoice {
   source: 'especie' | 'classe' | 'subclasse'
   group: OptionGroup
   chosen: ChoiceOption | null
+  /** chave usada na ficha; classes secundárias ganham prefixo para não colidir */
+  key: string
+  /** classe dona do grupo (ausente nos grupos de espécie) */
+  classId?: string
+  /** nome da classe, exibido quando o personagem é multiclasse */
+  className?: string
 }
+
+/**
+ * Chave de armazenamento de um grupo de escolha de classe. A classe inicial usa
+ * o id puro do grupo (é o que as fichas antigas já têm salvo); as demais ganham
+ * o prefixo da classe, senão Guerreiro e Paladino disputariam 'estilo-de-luta'.
+ */
+export const classChoiceKey = (groupId: string, primary: boolean, classId: string) =>
+  primary ? groupId : `${classId}:${groupId}`
 
 /** Grupos de escolha já desbloqueados pelo nível atual, com a opção selecionada. */
 export function characterChoices(char: Character, uptoLevel = char.level): ResolvedChoice[] {
   const out: ResolvedChoice[] = []
-  const push = (source: ResolvedChoice['source'], groups: OptionGroup[] | undefined, picks: Record<string, string>) => {
-    for (const group of groups ?? []) {
-      if ((group.level ?? 1) > uptoLevel) continue
-      out.push({ source, group, chosen: group.options.find((o) => o.id === picks[group.id]) ?? null })
-    }
+  const picksEspecie = char.speciesChoices ?? {}
+  const picksClasse = char.classChoices ?? {}
+
+  for (const group of speciesById(char.speciesId)?.choices ?? []) {
+    if ((group.level ?? 1) > uptoLevel) continue
+    out.push({
+      source: 'especie', group, key: group.id,
+      chosen: group.options.find((o) => o.id === picksEspecie[group.id]) ?? null,
+    })
   }
-  push('especie', speciesById(char.speciesId)?.choices, char.speciesChoices ?? {})
-  push('classe', classById(char.classId)?.choices, char.classChoices ?? {})
-  // Escolhas da subclasse (terreno do Círculo da Terra) moram no mesmo balde da classe.
-  push('subclasse', subclassOf(char)?.choices, char.classChoices ?? {})
+
+  // O nível que libera uma escolha de classe é o nível NAQUELA classe.
+  for (const { cls, subclass, entry, primary } of characterClasses(char)) {
+    const push = (source: 'classe' | 'subclasse', groups: OptionGroup[] | undefined) => {
+      for (const group of groups ?? []) {
+        if ((group.level ?? 1) > entry.level) continue
+        const key = classChoiceKey(group.id, primary, cls.id)
+        out.push({
+          source, group, key, classId: cls.id, className: cls.name,
+          chosen: group.options.find((o) => o.id === picksClasse[key]) ?? null,
+        })
+      }
+    }
+    push('classe', cls.choices)
+    // Escolhas da subclasse (terreno do Círculo da Terra) moram no mesmo balde da classe.
+    push('subclasse', subclass?.choices)
+  }
   return out
 }
 
@@ -196,7 +344,6 @@ export function armorClass(char: Character): { total: number; breakdown: string 
   const armorEntry = inv.find((r) => r.entry.equipped && r.item.kind === 'armadura')
   const shieldEntry = inv.find((r) => r.entry.equipped && r.item.kind === 'escudo')
   const magic = magicBonuses(char)
-  const cls = classById(char.classId)
 
   let base: number
   let label: string
@@ -208,10 +355,10 @@ export function armorClass(char: Character): { total: number; breakdown: string 
     label = `${armorEntry.name} ${a.baseAC}${dexPart ? ` ${fmtMod(dexPart)} DES` : ''}`
   } else {
     // Defesas sem armadura por classe (Bárbaro: DES+CON; Monge: DES+SAB)
-    if (cls?.id === 'barbaro') {
+    if (classLevel(char, 'barbaro') > 0) {
       base = 10 + mods.des + mods.con
       label = `Defesa sem Armadura 10 ${fmtMod(mods.des)} DES ${fmtMod(mods.con)} CON`
-    } else if (cls?.id === 'monge' && !shieldEntry) {
+    } else if (classLevel(char, 'monge') > 0 && !shieldEntry) {
       base = 10 + mods.des + mods.sab
       label = `Defesa sem Armadura 10 ${fmtMod(mods.des)} DES ${fmtMod(mods.sab)} SAB`
     } else {
@@ -239,29 +386,51 @@ export function armorClass(char: Character): { total: number; breakdown: string 
   return { total, breakdown: label }
 }
 
-/** PV máximo: nível 1 = dado cheio + CON; demais = média (ou rolagem) + CON. */
-export function maxHp(char: Character): number {
-  const cls = classById(char.classId)
-  if (!cls) return 1
-  const conMod = abilityMods(char).con
-  const die = cls.hitDie
-  const avg = die / 2 + 1
+/** Dado de Vida de cada nível de personagem (índice 0 = nível 1). */
+export function hitDicePerLevel(char: Character): number[] {
+  return levelClassIds(char).map((id) => classById(id)?.hitDie ?? 8)
+}
 
-  let total = die + conMod
-  for (let lv = 2; lv <= char.level; lv++) {
-    const rolled = char.hpRolls[lv - 2]
-    total += (rolled ?? avg) + conMod
+/** Dados de Vida do personagem agrupados por tamanho: "3d10 + 2d8". */
+export function hitDiceLabel(char: Character): string {
+  const contagem = new Map<number, number>()
+  for (const d of hitDicePerLevel(char)) contagem.set(d, (contagem.get(d) ?? 0) + 1)
+  return [...contagem.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([die, qtd]) => `${qtd}d${die}`)
+    .join(' + ')
+}
+
+/**
+ * PV máximo: o 1º nível usa o dado cheio da classe inicial; cada nível seguinte
+ * soma a média (ou o valor rolado, quando o jogador informou) do Dado de Vida da
+ * classe em que aquele nível foi ganho — o que já vale para fichas multiclasse.
+ */
+export function maxHp(char: Character): number {
+  const dados = hitDicePerLevel(char)
+  if (!dados.length) return 1
+  const conMod = abilityMods(char).con
+
+  let total = dados[0] + conMod
+  for (let lv = 2; lv <= dados.length; lv++) {
+    const die = dados[lv - 1]
+    const rolled = char.hpRolls?.[lv - 2]
+    total += (rolled ?? die / 2 + 1) + conMod
   }
 
   // Robustez Anã: +1 PV por nível
   if (char.speciesId === 'anao') total += char.level
   // Talento Durão: +2 PV por nível
   if (hasFeat(char, 'durao')) total += char.level * 2
-  // Resiliência Dracônica (Feiticeiro Dracônico)
-  if (char.subclassId === 'draconica') total += 3 + char.level
+  // Resiliência Dracônica (Feiticeiro Dracônico): 3 + nível de Feiticeiro
+  if (hasSubclass(char, 'draconica')) total += 3 + classLevel(char, 'feiticeiro')
 
   return Math.max(1, total)
 }
+
+/** O personagem tem esta subclasse em alguma das suas classes? */
+export const hasSubclass = (char: Character, subclassId: string): boolean =>
+  classEntries(char).some((e) => e.subclassId === subclassId)
 
 export const currentHp = (char: Character) => Math.max(0, maxHp(char) - char.damageTaken)
 
@@ -273,22 +442,27 @@ export function initiative(char: Character): number {
 
 export function speed(char: Character): number {
   const sp = speciesById(char.speciesId)?.speed ?? 9
-  const cls = classById(char.classId)
   let bonus = 0
   const inv = resolveInventory(char)
   const heavyArmor = inv.some((r) => r.entry.equipped && r.item.armor?.category === 'pesada')
-  if (cls?.id === 'barbaro' && char.level >= 5 && !heavyArmor) bonus += 3
-  if (cls?.id === 'monge') {
+  const nvBarbaro = classLevel(char, 'barbaro')
+  const nvMonge = classLevel(char, 'monge')
+  const nvPatrulheiro = classLevel(char, 'patrulheiro')
+  if (nvBarbaro >= 5 && !heavyArmor) bonus += 3
+  if (nvMonge > 0) {
     const noArmor = !inv.some((r) => r.entry.equipped && (r.item.kind === 'armadura' || r.item.kind === 'escudo'))
-    if (noArmor) bonus += char.level >= 18 ? 9 : char.level >= 14 ? 7.5 : char.level >= 10 ? 6 : char.level >= 6 ? 4.5 : 3
+    if (noArmor) bonus += nvMonge >= 18 ? 9 : nvMonge >= 14 ? 7.5 : nvMonge >= 10 ? 6 : nvMonge >= 6 ? 4.5 : 3
   }
-  if (cls?.id === 'patrulheiro' && char.level >= 6) bonus += 3
+  if (nvPatrulheiro >= 6) bonus += 3
   return sp + bonus
 }
 
-/** Salvaguardas com proficiência da classe + bônus mágicos gerais. */
+/**
+ * Salvaguardas: no PHB 2024 as proficiências em salvaguardas vêm SÓ da classe
+ * inicial — entrar numa segunda classe não concede novas.
+ */
 export function saves(char: Character) {
-  const cls = classById(char.classId)
+  const cls = primaryClass(char)?.cls
   const mods = abilityMods(char)
   const pb = proficiencyBonus(char.level)
   const magic = magicBonuses(char).save
@@ -314,77 +488,151 @@ export function passivePerception(char: Character): number {
 }
 
 // ---------- Conjuração ----------
+/** Uma classe conjuradora da ficha, com tudo que ela contribui. */
+export interface CasterClass {
+  classId: string
+  className: string
+  /** nível NESSA classe */
+  level: number
+  ability: AbilityKey
+  /** 'terco' quando a conjuração vem da subclasse (Cavaleiro Místico) */
+  caster: 'completo' | 'meio' | 'pacto' | 'terco'
+  /** id da lista de magias usada (o Cavaleiro Místico usa a de Mago) */
+  list: string
+  preparedByLevel?: number[]
+  cantripsByLevel?: number[]
+  preparation: PreparationMode | null
+  mod: number
+  attackBonus: number
+  saveDC: number
+}
+
+const naTabela = (tabela: number[] | undefined, level: number) =>
+  tabela ? tabela[Math.min(20, Math.max(1, level)) - 1] : undefined
+
+/**
+ * Todas as classes conjuradoras da ficha. Cada uma prepara magias da sua própria
+ * lista, com o seu próprio limite e a sua própria habilidade de conjuração —
+ * exatamente como o PHB 2024 descreve a multiclasse.
+ */
+export function casterClasses(char: Character): CasterClass[] {
+  const mods = abilityMods(char)
+  const pb = proficiencyBonus(char.level)
+  const out: CasterClass[] = []
+
+  for (const { cls, subclass, entry } of characterClasses(char)) {
+    const sub = subclass?.spellcasting
+    const daSubclasse = sub && entry.level >= sub.fromLevel ? sub : null
+    const ability = daSubclasse?.ability ?? (cls.caster !== 'nenhum' ? cls.spellAbility : undefined)
+    if (!ability) continue
+    const mod = mods[ability]
+    out.push({
+      classId: cls.id,
+      className: cls.name,
+      level: entry.level,
+      ability,
+      caster: daSubclasse ? 'terco' : (cls.caster as 'completo' | 'meio' | 'pacto'),
+      list: daSubclasse?.list ?? cls.id,
+      preparedByLevel: daSubclasse?.preparedByLevel ?? cls.preparedByLevel,
+      cantripsByLevel: daSubclasse?.cantripsByLevel ?? cls.cantripsByLevel,
+      // Cavaleiro Místico e Trapaceiro Arcano trocam uma magia ao subir de nível.
+      preparation: daSubclasse ? 'nivel-uma' : (cls.preparation ?? null),
+      mod,
+      attackBonus: mod + pb,
+      saveDC: 8 + mod + pb,
+    })
+  }
+  // A conjuração "principal" é a da classe com mais níveis.
+  return out.sort((a, b) => b.level - a.level)
+}
+
 /**
  * Conjuração concedida pela subclasse a uma classe que não conjura
  * (Cavaleiro Místico e Trapaceiro Arcano), quando já está desbloqueada.
  */
 export function subclassSpellcasting(char: Character) {
-  const sc = subclassOf(char)?.spellcasting
-  return sc && char.level >= sc.fromLevel ? sc : null
+  const { subclass, entry } = primaryClass(char) ?? {}
+  const sc = subclass?.spellcasting
+  return sc && (entry?.level ?? 0) >= sc.fromLevel ? sc : null
 }
 
+/** A conjuração em destaque na ficha: a da classe conjuradora de maior nível. */
 export function spellcasting(char: Character) {
-  const cls = classById(char.classId)
-  if (!cls) return null
-  const sub = subclassSpellcasting(char)
-  const ability = sub?.ability ?? (cls.caster !== 'nenhum' ? cls.spellAbility : undefined)
-  if (!ability) return null
-  const mods = abilityMods(char)
-  const pb = proficiencyBonus(char.level)
-  const mod = mods[ability]
+  const principal = casterClasses(char)[0]
+  if (!principal) return null
   return {
-    ability,
-    mod,
-    attackBonus: mod + pb,
-    saveDC: 8 + mod + pb,
-    caster: sub ? ('terco' as const) : cls.caster,
+    ability: principal.ability,
+    mod: principal.mod,
+    attackBonus: principal.attackBonus,
+    saveDC: principal.saveDC,
+    caster: principal.caster,
   }
 }
 
-/** Espaços de magia por nível (1..9). Bruxo usa espaços de Pacto separados. */
+/**
+ * Espaços de magia por círculo (1..9). Com uma classe só, vale a tabela da
+ * própria classe; com multiclasse vale o "nível de conjurador" do PHB 2024:
+ * conjuradores completos contam o nível inteiro, os de meio contam a metade e
+ * os de um terço contam um terço (sempre arredondando para baixo). O Bruxo fica
+ * de fora — os espaços de Pacto dele são contados à parte.
+ */
 export function spellSlots(char: Character): number[] {
-  const cls = classById(char.classId)
-  if (!cls) return []
-  const lv = Math.min(20, Math.max(1, char.level))
-  if (subclassSpellcasting(char)) return [...THIRD_CASTER_SLOTS[lv - 1], 0, 0, 0, 0, 0]
-  if (cls.caster === 'completo') return FULL_CASTER_SLOTS[lv - 1]
-  if (cls.caster === 'meio') return [...HALF_CASTER_SLOTS[lv - 1], 0, 0, 0, 0]
-  return []
+  const casters = casterClasses(char).filter((c) => c.caster !== 'pacto')
+  if (!casters.length) return []
+
+  if (!isMulticlass(char)) {
+    const c = casters[0]
+    const lv = Math.min(20, Math.max(1, c.level))
+    if (c.caster === 'terco') return [...THIRD_CASTER_SLOTS[lv - 1], 0, 0, 0, 0, 0]
+    if (c.caster === 'completo') return FULL_CASTER_SLOTS[lv - 1]
+    if (c.caster === 'meio') return [...HALF_CASTER_SLOTS[lv - 1], 0, 0, 0, 0]
+    return []
+  }
+
+  const nivelDeConjurador = casters.reduce((total, c) => total + (
+    c.caster === 'completo' ? c.level
+      : c.caster === 'meio' ? Math.floor(c.level / 2)
+        : Math.floor(c.level / 3)
+  ), 0)
+  if (nivelDeConjurador < 1) return []
+  return FULL_CASTER_SLOTS[Math.min(20, nivelDeConjurador) - 1]
 }
 
 export function pactSlots(char: Character): { count: number; level: number } | null {
-  const cls = classById(char.classId)
-  if (cls?.caster !== 'pacto') return null
-  const [count, level] = PACT_SLOTS[Math.min(20, char.level) - 1]
+  const nivel = classLevel(char, 'bruxo')
+  if (nivel < 1) return null
+  const [count, level] = PACT_SLOTS[Math.min(20, nivel) - 1]
   return { count, level }
 }
 
+/**
+ * Limite total de magias preparadas. Na multiclasse cada classe tem o seu
+ * limite, calculado pelo nível naquela classe; o número exibido é a soma.
+ */
 export function preparedLimit(char: Character): number | null {
-  const tabela = subclassSpellcasting(char)?.preparedByLevel ?? classById(char.classId)?.preparedByLevel
-  if (!tabela) return null
-  return tabela[Math.min(20, char.level) - 1]
+  const casters = casterClasses(char).filter((c) => c.preparedByLevel)
+  if (!casters.length) return null
+  return casters.reduce((total, c) => total + (naTabela(c.preparedByLevel, c.level) ?? 0), 0)
 }
 
 /** Opções de classe que concedem um truque extra da própria lista da classe. */
 const TRUQUE_EXTRA_DE_CLASSE = ['taumaturgo', 'mago-primal']
 
 export function cantripLimit(char: Character): number {
-  const tabela = subclassSpellcasting(char)?.cantripsByLevel ?? classById(char.classId)?.cantripsByLevel
-  if (!tabela) return 0
-  const base = tabela[Math.min(20, char.level) - 1]
+  const base = casterClasses(char)
+    .reduce((total, c) => total + (naTabela(c.cantripsByLevel, c.level) ?? 0), 0)
   // Ordem Divina (Taumaturgo) e Ordem Primal (Xamã) dão mais um truque.
   const extra = characterChoices(char).some(
     (c) => c.source === 'classe' && c.chosen && TRUQUE_EXTRA_DE_CLASSE.includes(c.chosen.id),
   ) ? 1 : 0
-  return base + extra
+  return base > 0 ? base + extra : base
 }
 
 // ---------- Preparação de magias ----------
 /** Como esta ficha muda a lista de magias preparadas (PHB 2024). */
 export function preparationMode(char: Character): PreparationMode | null {
-  // Cavaleiro Místico e Trapaceiro Arcano trocam uma magia ao subir de nível.
-  if (subclassSpellcasting(char)) return 'nivel-uma'
-  return classById(char.classId)?.preparation ?? null
+  // Na multiclasse vale a regra da classe conjuradora de maior nível.
+  return casterClasses(char)[0]?.preparation ?? null
 }
 
 /** Texto da regra de troca, exibido junto da lista de magias preparadas. */
@@ -413,11 +661,10 @@ export const PREPARATION_RULES: Record<PreparationMode, { quando: string; quanta
 
 /** Ids das classes cujas listas de magia esta ficha pode preparar. */
 export function spellListClasses(char: Character): string[] {
-  const sub = subclassSpellcasting(char)
-  if (sub) return [sub.list]
+  const listas = casterClasses(char).map((c) => c.list)
   // Bardo nível 10 (Segredos Mágicos): as novas magias podem vir de outras listas.
-  if (char.classId === 'bardo' && char.level >= 10) return ['bardo', 'clerigo', 'druida', 'mago']
-  return [char.classId]
+  if (classLevel(char, 'bardo') >= 10) listas.push('clerigo', 'druida', 'mago')
+  return [...new Set(listas)]
 }
 
 /** Truques que a ficha pode escolher (lista da classe ou da subclasse conjuradora). */
@@ -477,9 +724,9 @@ export interface ResolvedAlwaysPrepared {
 export function alwaysPreparedSpells(char: Character): ResolvedAlwaysPrepared[] {
   const out: ResolvedAlwaysPrepared[] = []
   const vistos = new Set<string>()
-  const add = (lista: AlwaysPreparedSpell[] | undefined, source: string) => {
+  const add = (lista: AlwaysPreparedSpell[] | undefined, source: string, nivel: number) => {
     for (const it of lista ?? []) {
-      if (char.level < it.level || vistos.has(it.spellId)) continue
+      if (nivel < it.level || vistos.has(it.spellId)) continue
       const spell = spellById(it.spellId)
       if (!spell) continue
       vistos.add(spell.id)
@@ -487,15 +734,18 @@ export function alwaysPreparedSpells(char: Character): ResolvedAlwaysPrepared[] 
     }
   }
 
-  const sub = subclassOf(char)
-  if (sub) add(sub.alwaysPrepared, sub.name)
-  for (const { group, chosen } of characterChoices(char)) {
-    if (chosen?.alwaysPrepared) add(chosen.alwaysPrepared, `${group.name}: ${chosen.name}`)
+  // Magias de domínio, patrono e juramento seguem o nível NAQUELA classe.
+  for (const { subclass, entry } of characterClasses(char)) {
+    if (subclass) add(subclass.alwaysPrepared, subclass.name, entry.level)
+  }
+  for (const { group, chosen, classId } of characterChoices(char)) {
+    const nivel = classId ? classLevel(char, classId) : char.level
+    if (chosen?.alwaysPrepared) add(chosen.alwaysPrepared, `${group.name}: ${chosen.name}`, nivel)
   }
   // Grupos de escolha marcados como "sempre preparada" (Segredos Mágicos do Colégio do Conhecimento)
   for (const { pick, chosen } of spellPickGroups(char)) {
     if (!pick.alwaysPrepared) continue
-    add(chosen.map((spellId) => ({ spellId, level: pick.level })), pick.source)
+    add(chosen.map((spellId) => ({ spellId, level: pick.level })), pick.source, pick.level)
   }
 
   return out.sort((a, b) => a.spell.level - b.spell.level || a.spell.name.localeCompare(b.spell.name))
@@ -544,28 +794,30 @@ export function spellPickGroups(
   opts: { uptoLevel?: number; extraFeatIds?: string[] } = {},
 ): ResolvedSpellPick[] {
   const uptoLevel = opts.uptoLevel ?? char.level
-  const picks: SpellPick[] = []
+  /** Cada grupo é comparado com o nível certo: o da classe, quando vem dela. */
+  const candidatos: { pick: SpellPick; nivel: number }[] = []
+  const juntar = (lista: SpellPick[] | undefined, nivel: number) => {
+    for (const p of lista ?? []) candidatos.push({ pick: p, nivel })
+  }
 
-  const sp = speciesById(char.speciesId)
-  if (sp?.spellPicks) picks.push(...sp.spellPicks)
-  const cls = classById(char.classId)
-  if (cls?.spellPicks) picks.push(...cls.spellPicks)
-  const sub = subclassOf(char)
-  if (sub?.spellPicks) picks.push(...sub.spellPicks)
-  for (const { chosen } of characterChoices(char, uptoLevel)) {
-    if (chosen?.spellPicks) picks.push(...chosen.spellPicks)
+  juntar(speciesById(char.speciesId)?.spellPicks, uptoLevel)
+  for (const { cls, subclass, entry } of characterClasses(char)) {
+    juntar(cls.spellPicks, entry.level)
+    juntar(subclass?.spellPicks, entry.level)
+  }
+  for (const { chosen, classId } of characterChoices(char, uptoLevel)) {
+    juntar(chosen?.spellPicks, classId ? classLevel(char, classId) : uptoLevel)
   }
   for (const id of [...allFeatIds(char), ...(opts.extraFeatIds ?? [])]) {
-    const feat = featById(id)
-    if (feat?.spellPicks) picks.push(...feat.spellPicks)
+    juntar(featById(id)?.spellPicks, uptoLevel)
   }
 
   // Segredos Mágicos e afins oferecem qualquer círculo até o maior acessível.
   const teto = maxSpellLevel({ ...char, level: uptoLevel })
   const vistos = new Set<string>()
-  return picks
-    .filter((p) => p.level <= uptoLevel && !vistos.has(p.id) && vistos.add(p.id) !== undefined)
-    .map((pick) => {
+  return candidatos
+    .filter(({ pick: p, nivel }) => p.level <= nivel && !vistos.has(p.id) && vistos.add(p.id) !== undefined)
+    .map(({ pick }) => {
       const options = SPELLS.filter(
         (s) => (pick.upToMaxSlot ? s.level >= pick.spellLevel && s.level <= teto : s.level === pick.spellLevel)
           && s.classes.some((c) => pick.fromClasses.includes(c))
@@ -639,10 +891,12 @@ export function innateSpells(char: Character): ResolvedInnateSpell[] {
 /** Nível máximo de magia acessível (para filtrar o catálogo). */
 export function maxSpellLevel(char: Character): number {
   const slots = spellSlots(char)
-  const pact = pactSlots(char)
-  if (pact) return pact.level
-  for (let i = slots.length - 1; i >= 0; i--) if (slots[i] > 0) return i + 1
-  return 0
+  let maior = 0
+  for (let i = slots.length - 1; i >= 0; i--) {
+    if (slots[i] > 0) { maior = i + 1; break }
+  }
+  // Um Bruxo multiclasse soma os espaços de Pacto aos espaços normais.
+  return Math.max(maior, pactSlots(char)?.level ?? 0)
 }
 
 // ---------- Ações de ataque ----------
@@ -664,7 +918,7 @@ export interface AttackAction {
 export function attackActions(char: Character): AttackAction[] {
   const mods = abilityMods(char)
   const pb = proficiencyBonus(char.level)
-  const cls = classById(char.classId)
+  const ehMonge = classLevel(char, 'monge') > 0
 
   return resolveInventory(char)
     .filter((r) => r.entry.equipped && r.item.kind === 'arma' && r.item.weapon)
@@ -675,7 +929,7 @@ export function attackActions(char: Character): AttackAction[] {
       if (wp.ranged) ability = 'des'
       else if (wp.finesse) ability = mods.des > mods.for ? 'des' : 'for'
       // Monge: Artes Marciais permite DES em armas de monge
-      if (cls?.id === 'monge' && !wp.heavy && !wp.twoHanded && mods.des > mods.for) ability = 'des'
+      if (ehMonge && !wp.heavy && !wp.twoHanded && mods.des > mods.for) ability = 'des'
 
       const proficient = isProficientWithWeapon(char, item)
       const abilityMod = mods[ability]
@@ -702,17 +956,24 @@ export function attackActions(char: Character): AttackAction[] {
  * (Treinamento Marcial do Colégio da Bravura).
  */
 export function armorTraining(char: Character): string[] {
-  const out = [...(classById(char.classId)?.armor ?? [])]
+  const out: string[] = []
+  // A classe inicial dá o treinamento completo; as demais, só o da tabela de multiclasse.
+  for (const { cls, subclass, primary } of characterClasses(char)) {
+    out.push(...(primary ? cls.armor : cls.multiclassArmor ?? cls.armor))
+    out.push(...(subclass?.armor ?? []))
+  }
   for (const { chosen } of characterChoices(char)) out.push(...(chosen?.armor ?? []))
-  out.push(...(subclassOf(char)?.armor ?? []))
   return [...new Set(out)]
 }
 
 /** Todas as proficiências com armas, das mesmas fontes de `armorTraining`. */
 export function weaponTraining(char: Character): string[] {
-  const out = [...(classById(char.classId)?.weapons ?? [])]
+  const out: string[] = []
+  for (const { cls, subclass, primary } of characterClasses(char)) {
+    out.push(...(primary ? cls.weapons : cls.multiclassWeapons ?? cls.weapons))
+    out.push(...(subclass?.weapons ?? []))
+  }
   for (const { chosen } of characterChoices(char)) out.push(...(chosen?.weapons ?? []))
-  out.push(...(subclassOf(char)?.weapons ?? []))
   return [...new Set(out)]
 }
 
@@ -749,8 +1010,9 @@ export const attunedCount = (char: Character) => char.inventory.filter((e) => e.
 // ---------- Maestria em Armas ----------
 /** Quantas armas o personagem pode escolher para a Maestria em Armas no nível atual. */
 export function weaponMasteryCount(char: Character): number {
-  const cls = classById(char.classId)
-  return cls?.masteryCount?.(char.level) ?? 0
+  // As classes compartilham a mesma lista de maestrias: vale a mais generosa.
+  return characterClasses(char)
+    .reduce((maior, { cls, entry }) => Math.max(maior, cls.masteryCount?.(entry.level) ?? 0), 0)
 }
 
 /** Armas com as quais a classe é proficiente — a Maestria só pode ser escolhida entre elas. */
@@ -777,10 +1039,10 @@ export interface ProficiencyGroups {
  * é esta lista que a aba de Perícias exibe.
  */
 export function proficiencyGroups(char: Character): ProficiencyGroups {
-  const cls = classById(char.classId)
+  const principal = primaryClass(char)
   const bg = backgroundById(char.backgroundId)
-  const armaduras = [...(cls?.armor ?? [])]
-  const armas = [...(cls?.weapons ?? [])]
+  const armaduras = [...(principal?.cls.armor ?? [])]
+  const armas = [...(principal?.cls.weapons ?? [])]
   const ferramentas: string[] = []
   if (bg?.tool) ferramentas.push(`${bg.tool} (antecedente ${bg.name})`)
 
@@ -790,15 +1052,20 @@ export function proficiencyGroups(char: Character): ProficiencyGroups {
       if (!base.some((b) => b === e || b.startsWith(`${e} (`))) base.push(`${e} (${fonte})`)
     }
   }
+  for (const { cls, subclass, primary } of characterClasses(char)) {
+    if (!primary) {
+      juntar(armaduras, cls.multiclassArmor ?? cls.armor, `multiclasse ${cls.name}`)
+      juntar(armas, cls.multiclassWeapons ?? cls.weapons, `multiclasse ${cls.name}`)
+    }
+    if (subclass) {
+      juntar(armaduras, subclass.armor, subclass.name)
+      juntar(armas, subclass.weapons, subclass.name)
+    }
+  }
   for (const { group, chosen } of characterChoices(char)) {
     if (!chosen) continue
     juntar(armaduras, chosen.armor, group.name)
     juntar(armas, chosen.weapons, group.name)
-  }
-  const subclasse = subclassOf(char)
-  if (subclasse) {
-    juntar(armaduras, subclasse.armor, subclasse.name)
-    juntar(armas, subclasse.weapons, subclasse.name)
   }
 
   return {
@@ -820,19 +1087,25 @@ export interface ResourceState {
 }
 
 export function characterResources(char: Character): ResourceState[] {
-  const cls = classById(char.classId)
-  if (!cls) return []
   const abs = finalAbilities(char)
-  const list: ResourceState[] = cls.resources
-    .filter((r) => char.level >= r.fromLevel)
-    .map((r) => ({
-      id: r.id,
-      name: r.name,
-      max: Math.max(0, r.max(char.level, abs)),
-      used: char.resourcesUsed[r.id] ?? 0,
-      recharge: r.recharge,
-      shortRestUses: r.shortRestUses,
-    }))
+  const list: ResourceState[] = []
+  const vistos = new Set<string>()
+
+  // Recursos de classe e de subclasse — cada um medido pelo nível NAQUELA classe.
+  for (const { cls, subclass, entry } of characterClasses(char)) {
+    for (const r of [...cls.resources, ...(subclass?.resources ?? [])]) {
+      if (entry.level < r.fromLevel || vistos.has(r.id)) continue
+      vistos.add(r.id)
+      list.push({
+        id: r.id,
+        name: r.name,
+        max: Math.max(0, r.max(entry.level, abs, char.level)),
+        used: char.resourcesUsed[r.id] ?? 0,
+        recharge: r.recharge,
+        shortRestUses: r.shortRestUses,
+      })
+    }
+  }
 
   // Recursos de espécie
   const pb = proficiencyBonus(char.level)
@@ -860,56 +1133,112 @@ export function characterResources(char: Character): ResourceState[] {
  */
 const isGenericSubclassSlot = (name: string) => name === 'Característica de Subclasse'
 
-/** Todas as características de classe desbloqueadas até o nível atual (inclui subclasse). */
+/**
+ * Todas as características desbloqueadas, de todas as classes do personagem.
+ * Numa ficha multiclasse o nome de cada característica leva a classe junto,
+ * porque o "nível 3" de uma classe não é o nível 3 da outra.
+ */
 export function unlockedFeatures(char: Character, uptoLevel = char.level) {
-  const cls = classById(char.classId)
-  if (!cls) return []
-  const subclass = cls.subclasses.find((s) => s.id === char.subclassId)
-  const subFeatures = subclass
-    ? subclass.features.filter((f) => f.level <= uptoLevel).map((f) => ({ ...f, name: `${f.name} (${subclass.name})` }))
-    : []
-  const níveisComSubclasse = new Set(subFeatures.map((f) => f.level))
-  const own = cls.features.filter(
-    (f) => f.level <= uptoLevel && !(isGenericSubclassSlot(f.name) && níveisComSubclasse.has(f.level)),
-  )
-  return [...own, ...subFeatures].sort((a, b) => a.level - b.level)
+  const classes = characterClasses(char)
+  const multi = classes.length > 1
+  const out: { level: number; name: string; desc: string }[] = []
+
+  for (const { cls, subclass, entry } of classes) {
+    const teto = Math.min(entry.level, uptoLevel)
+    const sufixo = multi ? ` · ${cls.name}` : ''
+    const subFeatures = subclass
+      ? subclass.features.filter((f) => f.level <= teto).map((f) => ({ ...f, name: `${f.name} (${subclass.name})` }))
+      : []
+    const níveisComSubclasse = new Set(subFeatures.map((f) => f.level))
+    const own = cls.features.filter(
+      (f) => f.level <= teto && !(isGenericSubclassSlot(f.name) && níveisComSubclasse.has(f.level)),
+    )
+    for (const f of [...own, ...subFeatures]) out.push({ ...f, name: `${f.name}${sufixo}` })
+  }
+  return out.sort((a, b) => a.level - b.level)
 }
 
-/** O que muda ao subir para `newLevel` — usado pelo assistente de evolução. */
-export function levelUpSummary(char: Character, newLevel: number) {
-  const cls = classById(char.classId)
+/** A subclasse escolhida numa classe específica da ficha. */
+export const subclassIdOf = (char: Character, classId: string): string | undefined =>
+  classEntries(char).find((e) => e.classId === classId)?.subclassId
+
+/**
+ * Ficha resultante de ganhar um nível na classe indicada — a base de tudo que o
+ * assistente de evolução mostra. Serve tanto para subir na mesma classe quanto
+ * para entrar numa classe nova (multiclasse).
+ */
+export function withLevelIn(char: Character, classId: string, subclassId?: string): Character {
+  const entradas = classEntries(char).map((e) => ({ ...e }))
+  const i = entradas.findIndex((e) => e.classId === classId)
+  if (i >= 0) entradas[i].level += 1
+  else entradas.push({ classId, level: 1, subclassId })
+  const alvo = entradas.findIndex((e) => e.classId === classId)
+  if (subclassId !== undefined) entradas[alvo].subclassId = subclassId
+
+  return {
+    ...char,
+    level: char.level + 1,
+    classes: entradas,
+    levelClasses: [...levelClassIds(char), classId],
+    // `subclassId` da ficha continua sendo o da classe inicial.
+    subclassId: classId === char.classId && subclassId !== undefined ? subclassId : char.subclassId,
+  }
+}
+
+/**
+ * O que muda ao subir para `newLevel`. `targetClassId` é a classe que ganha o
+ * nível — igual à classe inicial numa ficha normal, ou outra numa multiclasse.
+ */
+export function levelUpSummary(
+  char: Character,
+  newLevel: number,
+  targetClassId: string = char.classId,
+  targetSubclassId?: string,
+) {
+  const cls = classById(targetClassId)
   if (!cls) return null
-  const subclass = cls.subclasses.find((s) => s.id === char.subclassId)
-  const newSubFeatures = subclass ? subclass.features.filter((f) => f.level === newLevel) : []
+  const after = withLevelIn(char, targetClassId, targetSubclassId)
+  const novoNivelDeClasse = classLevel(after, targetClassId)
+  const subclassAtual = targetSubclassId ?? subclassIdOf(after, targetClassId)
+  const subclass = cls.subclasses.find((s) => s.id === subclassAtual)
+
+  const newSubFeatures = subclass ? subclass.features.filter((f) => f.level === novoNivelDeClasse) : []
   const newFeatures = cls.features.filter(
-    (f) => f.level === newLevel && !(isGenericSubclassSlot(f.name) && newSubFeatures.length > 0),
+    (f) => f.level === novoNivelDeClasse && !(isGenericSubclassSlot(f.name) && newSubFeatures.length > 0),
   )
 
-  const before = { ...char, level: newLevel - 1 }
-  const after = { ...char, level: newLevel }
-  const slotsBefore = spellSlots(before)
+  const slotsBefore = spellSlots(char)
   const slotsAfter = spellSlots(after)
   const newSlots = slotsAfter
     .map((n, i) => ({ level: i + 1, gained: n - (slotsBefore[i] ?? 0), total: n }))
     .filter((s) => s.gained > 0)
 
-  const prepBefore = preparedLimit(before) ?? 0
+  const prepBefore = preparedLimit(char) ?? 0
   const prepAfter = preparedLimit(after) ?? 0
-  const cantripBefore = cantripLimit(before)
+  const cantripBefore = cantripLimit(char)
   const cantripAfter = cantripLimit(after)
 
-  const needsSubclass = !char.subclassId && cls.features.some((f) => f.level === newLevel && f.name.startsWith('Escolha de'))
-  const needsAsi = cls.features.some((f) => f.level === newLevel && f.name === 'Incremento no Valor de Habilidade')
+  const needsSubclass = !subclassIdOf(char, targetClassId)
+    && cls.features.some((f) => f.level === novoNivelDeClasse && f.name.startsWith('Escolha de'))
+  const needsAsi = cls.features.some(
+    (f) => f.level === novoNivelDeClasse && f.name === 'Incremento no Valor de Habilidade',
+  )
 
-  const pactBefore = pactSlots(before)
+  const pactBefore = pactSlots(char)
   const pactAfter = pactSlots(after)
 
   return {
     level: newLevel,
+    /** nível alcançado NA classe escolhida */
+    classLevel: novoNivelDeClasse,
+    classId: cls.id,
+    className: cls.name,
+    /** é o primeiro nível numa classe nova */
+    novaClasse: classLevel(char, targetClassId) === 0,
     hitDie: cls.hitDie,
     features: [...newFeatures, ...newSubFeatures],
     newSlots,
-    pactChanged: pactBefore && pactAfter && (pactBefore.count !== pactAfter.count || pactBefore.level !== pactAfter.level) ? pactAfter : null,
+    pactChanged: pactBefore?.count !== pactAfter?.count || pactBefore?.level !== pactAfter?.level ? pactAfter : null,
     newPrepared: prepAfter - prepBefore,
     preparedTotal: prepAfter,
     newCantrips: cantripAfter - cantripBefore,
@@ -920,6 +1249,82 @@ export function levelUpSummary(char: Character, newLevel: number) {
     proficiencyChanged: proficiencyBonus(newLevel) !== proficiencyBonus(newLevel - 1),
   }
 }
+
+// ---------- Características com várias opções ----------
+/** Um grupo de opções de característica já resolvido para a ficha. */
+export interface ResolvedFeaturePick {
+  pick: FeaturePick
+  /** classe dona do grupo */
+  classId: string
+  className: string
+  /** nome da subclasse, quando o grupo vem dela */
+  subclassName?: string
+  /** quantas opções escolher (0 = todas as liberadas são concedidas) */
+  count: number
+  /** opções liberadas pelo nível de classe atual */
+  options: FeatureOption[]
+  /** opções em vigor: as escolhidas, ou todas quando o grupo não é de escolha */
+  active: FeatureOption[]
+  /** ids marcados na ficha */
+  chosen: string[]
+  pending: boolean
+  /** dado associado no nível atual ("d8"), quando houver */
+  die?: string
+  /** recurso que as opções consomem */
+  resourceId?: string
+}
+
+/**
+ * Todos os grupos de opções de características do personagem: Manobras,
+ * Invocações Místicas, Metamagia, Canalizar Divindade e afins. Um grupo sem
+ * `countByLevel` não é escolha — todas as opções liberadas já valem.
+ */
+export function featurePickGroups(char: Character): ResolvedFeaturePick[] {
+  const out: ResolvedFeaturePick[] = []
+
+  for (const { cls, subclass, entry } of characterClasses(char)) {
+    const fontes: { pick: FeaturePick; subclassName?: string }[] = [
+      ...(cls.featurePicks ?? []).map((pick) => ({ pick })),
+      ...(subclass?.featurePicks ?? []).map((pick) => ({ pick, subclassName: subclass!.name })),
+    ]
+
+    for (const { pick, subclassName } of fontes) {
+      const count = pick.countByLevel ? (naTabela(pick.countByLevel, entry.level) ?? 0) : 0
+      const options = pick.options.filter((o) => (o.level ?? 1) <= entry.level)
+      // Um grupo de escolha só aparece quando o nível já libera pelo menos uma;
+      // um grupo concedido aparece assim que tem opção disponível.
+      if (pick.countByLevel ? count <= 0 : options.length === 0) continue
+
+      const chosen = (char.featureChoices?.[pick.id] ?? [])
+        .filter((id) => options.some((o) => o.id === id))
+        .slice(0, count || undefined)
+      const active = pick.countByLevel ? options.filter((o) => chosen.includes(o.id)) : options
+
+      out.push({
+        pick,
+        classId: cls.id,
+        className: cls.name,
+        subclassName,
+        count,
+        options,
+        active,
+        chosen,
+        pending: !!pick.countByLevel && chosen.length < count,
+        die: pick.dieByLevel ? (pick.dieByLevel[Math.min(20, Math.max(1, entry.level)) - 1] || undefined) : undefined,
+        resourceId: pick.resourceId,
+      })
+    }
+  }
+  return out
+}
+
+/** Só os grupos de escolha ainda incompletos — o aviso da ficha e o gate dos assistentes. */
+export const pendingFeaturePicks = (char: Character): ResolvedFeaturePick[] =>
+  featurePickGroups(char).filter((g) => g.pending)
+
+/** Uma opção só pode ser marcada se o pré-requisito dela já estiver escolhido. */
+export const featureOptionBlocked = (option: FeatureOption, chosen: string[]): boolean =>
+  !!option.requires && !chosen.includes(option.requires)
 
 /** Talentos ativos do personagem, com a origem de cada um para exibir na ficha. */
 export function characterFeats(char: Character) {

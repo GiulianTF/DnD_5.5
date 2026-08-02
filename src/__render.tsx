@@ -179,6 +179,61 @@ tenta('CharacterSheet (editar escolhas)', () => renderToString(<CharacterSheet c
 tenta('LevelUpWizard (aasimar nv3: revelacao celestial)', () =>
   renderToString(<LevelUpWizard char={newCharacter({ classId: 'bardo', speciesId: 'aasimar', level: 2, hpRolls: [null] })} onClose={() => {}} />))
 
+console.log('\n== Recursos de subclasse e multiclasse ==')
+const mestreDeBatalha: Character = newCharacter({
+  classId: 'guerreiro', level: 7, subclassId: 'mestre-de-batalha', hpRolls: Array(6).fill(null),
+  featureChoices: { manobras: ['ataque-preciso', 'ataque-rasteira', 'aparar', 'resposta', 'finta'] },
+  inventory: [{ uid: '1', itemId: 'espada-longa', qty: 1, equipped: true }],
+})
+tenta('ActionsTab (Mestre de Batalha com manobras)', () => renderToString(<ActionsTab char={mestreDeBatalha} />))
+tenta('CharacterSheet (editar manobras)', () =>
+  renderToString(<CharacterSheet char={mestreDeBatalha} onBack={() => {}} />))
+tenta('LevelUpWizard (guerreiro nv2 -> escolher Mestre de Batalha)', () =>
+  renderToString(<LevelUpWizard char={newCharacter({ classId: 'guerreiro', level: 2, hpRolls: [null] })} onClose={() => {}} />))
+
+const bruxoPactos: Character = newCharacter({
+  classId: 'bruxo', level: 5, hpRolls: Array(4).fill(null),
+  featureChoices: { 'invocacoes-misticas': ['pacto-da-lamina', 'explosao-agonizante'] },
+})
+tenta('ActionsTab (bruxo com pactos)', () => renderToString(<ActionsTab char={bruxoPactos} />))
+tenta('CharacterSheet (editar invocacoes)', () =>
+  renderToString(<CharacterSheet char={bruxoPactos} onBack={() => {}} />))
+tenta('LevelUpWizard (bruxo nv1: invocacao pendente)', () =>
+  renderToString(<LevelUpWizard char={newCharacter({ classId: 'bruxo', level: 1 })} onClose={() => {}} />))
+
+const feiticeiroMeta: Character = newCharacter({
+  classId: 'feiticeiro', level: 10, hpRolls: Array(9).fill(null),
+  featureChoices: { metamagia: ['acelerada', 'sutil', 'duplicada'] },
+})
+tenta('ActionsTab (feiticeiro com metamagia)', () => renderToString(<ActionsTab char={feiticeiroMeta} />))
+tenta('ActionsTab (clerigo: canalizar divindade)', () => renderToString(
+  <ActionsTab char={newCharacter({ classId: 'clerigo', level: 6, subclassId: 'luz', hpRolls: Array(5).fill(null) })} />,
+))
+
+const multi: Character = newCharacter({
+  classId: 'guerreiro', level: 8, subclassId: 'campeao',
+  baseAbilities: { for: 15, des: 14, con: 14, int: 10, sab: 10, car: 15 },
+  hpRolls: Array(7).fill(null),
+  classes: [
+    { classId: 'guerreiro', subclassId: 'campeao', level: 5 },
+    { classId: 'bruxo', subclassId: 'infernal', level: 3 },
+  ],
+  levelClasses: ['guerreiro', 'guerreiro', 'guerreiro', 'guerreiro', 'guerreiro', 'bruxo', 'bruxo', 'bruxo'],
+  featureChoices: { 'invocacoes-misticas': ['pacto-da-lamina', 'explosao-agonizante', 'visao-diabolica'] },
+  inventory: [{ uid: '1', itemId: 'espada-longa', qty: 1, equipped: true }],
+})
+for (const [nome, el] of [
+  ['SheetTab', <SheetTab char={multi} />],
+  ['SkillsTab', <SkillsTab char={multi} />],
+  ['ActionsTab', <ActionsTab char={multi} />],
+  ['ItemsTab', <ItemsTab char={multi} />],
+  ['SpellsTab', <SpellsTab char={multi} />],
+  ['CharacterSheet', <CharacterSheet char={multi} onBack={() => {}} />],
+  ['LevelUpWizard', <LevelUpWizard char={multi} onClose={() => {}} />],
+] as [string, JSX.Element][]) {
+  tenta(`${nome} (Guerreiro 5 / Bruxo 3)`, () => renderToString(el))
+}
+
 console.log('\n== Todas as 12 classes, do nivel 1 ao 20 ==')
 for (const c of CLASSES) {
   let erros = 0

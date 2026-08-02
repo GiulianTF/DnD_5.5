@@ -4,10 +4,10 @@ import { ABILITY_NAMES } from '../../types'
 import { spellById } from '../../data/spells'
 import { classById } from '../../data/classes'
 import {
-  PREPARATION_RULES, alwaysPreparedSpells, availableCantrips, cantripLimit, classSpellCatalog,
-  fmtMod, innateSpells, innateUsesLabel, knownCantripIds, pactSlots, preparableSpells,
-  preparationMode, preparedLimit, preparedSpellIds, spellListClasses, spellSlots, spellcasting,
-  subclassOf,
+  PREPARATION_RULES, alwaysPreparedSpells, availableCantrips, cantripLimit, casterClasses,
+  classLabel, classSpellCatalog, fmtMod, innateSpells, innateUsesLabel, knownCantripIds, pactSlots,
+  preparableSpells, preparationMode, preparedLimit, preparedSpellIds, spellListClasses, spellSlots,
+  spellcasting, subclassOf,
 } from '../../engine/rules'
 import { useStore } from '../../store/store'
 import { Card, Empty, Sheet, SpellText } from '../../components/ui'
@@ -31,6 +31,8 @@ export function SpellsTab({ char }: { char: Character }) {
   const pact = pactSlots(char)
   const modo = preparationMode(char)
   const subclasse = subclassOf(char)
+  /** Numa ficha multiclasse cada classe conjura com a habilidade e a CD dela. */
+  const conjuradoras = casterClasses(char)
 
   // Truques e magias concedidos pela espécie, linhagem e talentos valem para qualquer classe.
   const inatas = innateSpells(char)
@@ -87,7 +89,7 @@ export function SpellsTab({ char }: { char: Character }) {
       return (
         <Empty
           icon="✨"
-          title={`${cls?.name ?? 'Esta classe'} não conjura magias`}
+          title={`${classLabel(char)} não conjura magias`}
           hint="Subclasses como Cavaleiro Místico e Trapaceiro Arcano ganham conjuração no 3º nível."
         />
       )
@@ -195,6 +197,18 @@ export function SpellsTab({ char }: { char: Character }) {
             <div className="score">mágico</div>
           </div>
         </div>
+        {conjuradoras.length > 1 && (
+          <div className="tiny muted" style={{ marginTop: 10 }}>
+            Você conjura por mais de uma classe — cada uma tem a própria habilidade e a própria CD:
+            {conjuradoras.map((c) => (
+              <div key={c.classId}>
+                <strong className="gold">{c.className} {c.level}</strong>{' '}
+                — {ABILITY_NAMES[c.ability]} · CD {c.saveDC} · ataque {fmtMod(c.attackBonus)}
+              </div>
+            ))}
+            Os espaços de magia abaixo são compartilhados, conforme a regra de multiclasse do PHB 2024.
+          </div>
+        )}
         <div className="tiny muted" style={{ marginTop: 10 }}>
           Lista de magias: <strong className="gold">{listasLabel}</strong>
           {sc.caster === 'terco' && ' · conjuração concedida pela subclasse'}

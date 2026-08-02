@@ -3,14 +3,14 @@ import type { Character } from '../../types'
 import { ABILITIES, ABILITY_NAMES } from '../../types'
 import {
   abilityMods, armorClass, characterChoices, characterFeats, characterResources, currentHp,
-  finalAbilities, fmtMod, initiative, maxHp, passivePerception, proficiencyBonus, saves,
-  speciesLabel, speciesVariants, speed, spellcasting, unlockedFeatures,
+  finalAbilities, fmtMod, hitDicePerLevel, hitDiceLabel, initiative, maxHp, pactSlots,
+  passivePerception, pendingFeaturePicks, proficiencyBonus, saves, speciesLabel, speciesVariants,
+  speed, spellcasting, unlockedFeatures,
 } from '../../engine/rules'
 import { featById } from '../../data/feats'
 import { FEAT_CATEGORY_NAMES } from '../../data/feats'
 import { useStore } from '../../store/store'
 import { roll } from '../../engine/dice'
-import { classById } from '../../data/classes'
 import { speciesById } from '../../data/species'
 import { backgroundById } from '../../data/backgrounds'
 import { Card, Sheet } from '../../components/ui'
@@ -27,12 +27,14 @@ export function SheetTab({ char }: { char: Character }) {
   const hp = currentHp(char)
   const hpMax = maxHp(char)
   const pb = proficiencyBonus(char.level)
-  const cls = classById(char.classId)
   const sc = spellcasting(char)
   const resources = characterResources(char)
   const feats = characterFeats(char)
   const escolhas = characterChoices(char)
   const pendentes = escolhas.filter((e) => !e.chosen)
+  const featuresPendentes = pendingFeaturePicks(char)
+  /** Tamanhos distintos de Dado de Vida — numa ficha multiclasse há mais de um. */
+  const dadosDeVida = [...new Set(hitDicePerLevel(char))].sort((a, b) => b - a)
   const variantes = speciesVariants(char)
   const pendentesEspecie = pendentes.filter((e) => e.source === 'especie')
   const bg = backgroundById(char.backgroundId)
@@ -52,7 +54,7 @@ export function SheetTab({ char }: { char: Character }) {
     setRestMsg([
       'Recursos com recarga em descanso curto foram restaurados.',
       ...parciais.map((r) => `${r.name}: +${Math.min(r.shortRestUses!, r.used)} uso recuperado.`),
-      cls?.caster === 'pacto' ? 'Espaços de Pacto recuperados.' : '',
+      pactSlots(char) ? 'Espaços de Pacto recuperados.' : '',
     ].filter(Boolean))
     setRestSheet('curto')
   }
@@ -70,9 +72,15 @@ export function SheetTab({ char }: { char: Character }) {
 
   return (
     <div>
-      {pendentes.length > 0 && (
+      {(pendentes.length > 0 || featuresPendentes.length > 0) && (
         <div className="banner warn">
-          Escolhas pendentes: <strong>{pendentes.map((p) => p.group.name).join(', ')}</strong>.
+          Escolhas pendentes:{' '}
+          <strong>
+            {[
+              ...pendentes.map((p) => p.group.name),
+              ...featuresPendentes.map((f) => `${f.pick.name} (${f.chosen.length}/${f.count})`),
+            ].join(', ')}
+          </strong>.
           Toque no nome do personagem, no topo, para escolher.
         </div>
       )}
@@ -86,7 +94,7 @@ export function SheetTab({ char }: { char: Character }) {
             {char.tempHp > 0 && <span className="gold"> (+{char.tempHp} temp)</span>}
           </div>
           <div className="tiny muted">
-            Dados de Vida: {char.level - char.hitDiceSpent}/{char.level} d{cls?.hitDie}
+            Dados de Vida: {char.level - char.hitDiceSpent}/{char.level} · {hitDiceLabel(char)}
           </div>
         </div>
         <div className="hpbar"><div style={{ width: `${Math.max(0, (hp / hpMax) * 100)}%` }} /></div>
@@ -224,11 +232,11 @@ export function SheetTab({ char }: { char: Character }) {
       {/* --- Escolhas de espécie e de classe --- */}
       {escolhas.length > 0 && (
         <Card title="Escolhas de Espécie e Classe">
-          {escolhas.map(({ group, chosen, source }) => (
-            <div className="feature" key={`${source}-${group.id}`}>
+          {escolhas.map(({ group, chosen, source, key, className }) => (
+            <div className="feature" key={key}>
               <h4>
                 {group.name}{' '}
-                <span className="muted tiny">· {source === 'especie' ? 'Espécie' : 'Classe'}</span>
+                <span className="muted tiny">· {source === 'especie' ? 'Espécie' : className ?? 'Classe'}</span>
               </h4>
               {chosen ? (
                 <p><strong className="gold">{chosen.name}:</strong> {chosen.desc}</p>
@@ -291,17 +299,21 @@ export function SheetTab({ char }: { char: Character }) {
           {restSheet === 'curto' && (
             <Card title="Gastar Dados de Vida">
               <p className="muted tiny" style={{ marginBottom: 10 }}>
-                Role um Dado de Vida (d{cls?.hitDie}) + modificador de Constituição para recuperar PV.
+                Role um Dado de Vida ({hitDiceLabel(char)}) + modificador de Constituição para recuperar PV.
                 Disponíveis: <strong>{char.level - char.hitDiceSpent}</strong>.
+                {dadosDeVida.length > 1 && ' Escolha qual dado gastar.'}
               </p>
-              <button
-                className="gold" style={{ width: '100%' }}
-                disabled={char.hitDiceSpent >= char.level}
-                onClick={() => {
-                  const healed = spendHitDie(char.id)
-                  if (healed !== null) setRestMsg((m) => [...m, `Você rolou o Dado de Vida e recuperou ${healed} PV.`])
-                }}
-              >🎲 Rolar 1 Dado de Vida</button>
+              {dadosDeVida.map((die) => (
+                <button
+                  key={die}
+                  className="gold" style={{ width: '100%', marginBottom: 6 }}
+                  disabled={char.hitDiceSpent >= char.level}
+                  onClick={() => {
+                    const healed = spendHitDie(char.id, die)
+                    if (healed !== null) setRestMsg((m) => [...m, `Você rolou 1d${die} e recuperou ${healed} PV.`])
+                  }}
+                >🎲 Rolar 1d{die}</button>
+              ))}
             </Card>
           )}
         </Sheet>

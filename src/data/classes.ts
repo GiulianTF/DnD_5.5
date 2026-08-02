@@ -3,8 +3,16 @@ import type {
   OptionGroup, Subclass,
 } from '../types'
 import { FIGHTING_STYLES } from './feats'
+import {
+  CANALIZAR_DIVINDADE_CLERIGO, CANALIZAR_DIVINDADE_PALADINO, DISCIPLINAS_DE_FOCO,
+  INVOCACOES_MISTICAS, MANOBRAS, METAMAGIA, OPCOES_DE_FURIA, OPCOES_DE_INSPIRACAO,
+  OPCOES_DE_RECUPERACAO, PODER_PSIONICO_GUERREIRO, PODER_PSIONICO_LADINO,
+  canalizarDeSubclasse,
+} from './class-options'
 
 const mod = (v: number) => Math.floor((v - 10) / 2)
+/** Bônus de proficiência pelo nível TOTAL de personagem. */
+const pb = (charLevel: number) => 2 + Math.floor((charLevel - 1) / 4)
 
 /**
  * Converte a tabela de magias sempre preparadas do livro ("Nível de Clérigo /
@@ -88,6 +96,9 @@ export const CLASSES: DndClass[] = [
   // ================= BÁRBARO =================
   {
     id: 'barbaro',
+    multiclassReq: { any: ['for'] },
+    multiclassArmor: ['Escudos'],
+    multiclassWeapons: ['Simples', 'Marciais'],
     name: 'Bárbaro',
     hitDie: 12,
     primary: 'Força',
@@ -133,11 +144,12 @@ export const CLASSES: DndClass[] = [
       { level: 20, name: 'Campeão Primal', desc: 'FOR e CON aumentam em +4 (máximo 25).' },
     ],
     masteryCount: (lv) => (lv >= 10 ? 4 : lv >= 4 ? 3 : 2),
+    featurePicks: [OPCOES_DE_FURIA],
     resources: [
       { id: 'furia', name: 'Fúria', fromLevel: 1, recharge: 'longo', max: (lv) => (lv >= 17 ? 6 : lv >= 12 ? 5 : lv >= 6 ? 4 : lv >= 3 ? 3 : 2) },
     ],
     subclasses: [
-      sub('berserker', 'Caminho do Furioso (Berserker)', 'Canalize a fúria em violência desenfreada.', [
+      sub('berserker', 'Caminho do Furioso', 'Canalize a fúria em violência desenfreada.', [
         [3, 'Frenesi', 'Durante a Fúria, seu Ataque Descuidado causa dano extra igual a dados d6 = bônus de dano da Fúria.'],
         [6, 'Fúria Inconsequente', 'Imune a Enfeitiçado e Amedrontado durante a Fúria.'],
         [10, 'Represália', 'Reação: ataque corpo a corpo contra quem te causar dano a até 1,5 m.'],
@@ -168,6 +180,9 @@ export const CLASSES: DndClass[] = [
   // ================= BARDO =================
   {
     id: 'bardo',
+    multiclassReq: { any: ['car'] },
+    multiclassArmor: ['Leve'],
+    multiclassWeapons: [],
     name: 'Bardo',
     hitDie: 8,
     primary: 'Carisma',
@@ -208,6 +223,7 @@ export const CLASSES: DndClass[] = [
       epicBoon(),
       { level: 20, name: 'Palavras de Criação', desc: 'Sempre tenha Palavra de Poder: Curar e Palavra de Poder: Matar preparadas; podem afetar um segundo alvo próximo.' },
     ],
+    featurePicks: [OPCOES_DE_INSPIRACAO],
     resources: [
       { id: 'inspiracao-bardica', name: 'Inspiração de Bardo', fromLevel: 1, recharge: 'longo', max: (_lv, m) => Math.max(1, mod(m.car)) },
     ],
@@ -218,7 +234,7 @@ export const CLASSES: DndClass[] = [
         [6, 'Batida Alinhada', 'Use DES para ataques desarmados; dado de Inspiração como dano.'],
         [14, 'Presença de Palco', 'Ao rolar Iniciativa, recupere um uso de Inspiração; imunidade a quedas curtas.'],
       ]),
-      sub('encanto', 'Colégio do Encanto (Glamour)', 'Majestade feérica que fascina e protege.', [
+      sub('encanto', 'Colégio do Encanto', 'Majestade feérica que fascina e protege.', [
         [3, 'Manto de Inspiração', 'Bônus: gaste um uso de Inspiração para dar PV temporário e movimento livre a aliados.'],
         [3, 'Atuação Hipnotizante', 'Encante plateias com sua atuação (SG SAB).'],
         [6, 'Manto de Majestade', 'Bônus: conjure Comando sem gastar espaço, 1×/turno.'],
@@ -243,7 +259,7 @@ export const CLASSES: DndClass[] = [
           nota: 'Contam como magias de Bardo e ficam sempre preparadas, sem ocupar vaga na sua lista.',
         }],
       }),
-      sub('bravura', 'Colégio da Bravura (Valor)', 'Bardos guerreiros que inspiram em batalha.', [
+      sub('bravura', 'Colégio da Bravura', 'Bardos guerreiros que inspiram em batalha.', [
         [3, 'Inspiração em Combate', 'Aliados podem usar sua Inspiração para dano extra ou CA (reação).'],
         [3, 'Treinamento Marcial', 'Proficiência com armas marciais, armadura média e escudos.'],
         [6, 'Ataque Extra', 'Ataque duas vezes com a ação Atacar; pode trocar um ataque por um truque.'],
@@ -255,6 +271,9 @@ export const CLASSES: DndClass[] = [
   // ================= CLÉRIGO =================
   {
     id: 'clerigo',
+    multiclassReq: { any: ['sab'] },
+    multiclassArmor: ['Leve', 'Média', 'Escudos'],
+    multiclassWeapons: [],
     name: 'Clérigo',
     hitDie: 8,
     primary: 'Sabedoria',
@@ -322,6 +341,7 @@ export const CLASSES: DndClass[] = [
       epicBoon(),
       { level: 20, name: 'Intervenção Divina Maior', desc: 'Sua Intervenção Divina pode conjurar Desejo (recarrega em 2d4 descansos longos).' },
     ],
+    featurePicks: [CANALIZAR_DIVINDADE_CLERIGO],
     resources: [
       { id: 'canalizar-divindade', name: 'Canalizar Divindade', fromLevel: 2, recharge: 'longo', shortRestUses: 1, max: (lv) => (lv >= 18 ? 4 : lv >= 6 ? 3 : 2) },
       { id: 'intervencao-divina', name: 'Intervenção Divina', fromLevel: 10, recharge: 'longo', max: () => 1 },
@@ -334,6 +354,7 @@ export const CLASSES: DndClass[] = [
         [6, 'Curandeiro Abençoado', 'Curar outros também cura você.'],
         [17, 'Cura Suprema', 'Magias de cura usam o valor máximo dos dados.'],
       ], {
+        featurePicks: [canalizarDeSubclasse('canalizar-divindade', 'preservar-a-vida', 'Preservar a Vida', 'Ação Mágica: distribua um total de cura igual a 5 × seu nível de Clérigo entre criaturas a até 9 m; nenhuma pode passar da metade dos PV máximos dela.')],
         alwaysPrepared: semprePreparadas({
           3: ['auxilio', 'bencao', 'curar-ferimentos', 'restauracao-menor'],
           5: ['palavra-curativa-em-massa', 'revivificar'],
@@ -348,6 +369,7 @@ export const CLASSES: DndClass[] = [
         [6, 'Clarão Aprimorado', 'Chama Protetora pode proteger aliados próximos.'],
         [17, 'Coroa de Luz', 'Emita luz solar; inimigos na luz têm desvantagem contra suas magias de fogo/radiante.'],
       ], {
+        featurePicks: [canalizarDeSubclasse('canalizar-divindade', 'explosao-de-radiancia', 'Explosão de Radiância', 'Ação Mágica: criaturas à sua escolha a até 9 m fazem salvaguarda de Constituição e sofrem 2d10 + nível de Clérigo de dano Radiante (metade se passarem).')],
         alwaysPrepared: semprePreparadas({
           3: ['fogo-das-fadas', 'maos-flamejantes', 'raio-ardente', 'ver-o-invisivel'],
           5: ['bola-de-fogo', 'luz-do-dia'],
@@ -362,6 +384,7 @@ export const CLASSES: DndClass[] = [
         [6, 'Passos da Trapaça', 'Bônus: teleporte-se trocando de lugar com sua duplicata.'],
         [17, 'Ladrão Aprimorado', 'Duplicatas extras e magias pela duplicata com vantagem.'],
       ], {
+        featurePicks: [canalizarDeSubclasse('canalizar-divindade', 'invocar-duplicata', 'Invocar Duplicata', 'Ação Mágica: crie uma ilusão perfeita de você a até 9 m por 1 minuto; você pode conjurar magias como se estivesse no lugar dela.')],
         alwaysPrepared: semprePreparadas({
           3: ['disfarcar-se', 'enfeiticar-pessoa', 'invisibilidade', 'passo-sem-rastro'],
           5: ['indetectavel', 'padrao-hipnotico'],
@@ -376,6 +399,7 @@ export const CLASSES: DndClass[] = [
         [6, 'Bênção do Deus da Guerra', 'Ataque Direcionado como reação para aliados.'],
         [17, 'Avatar da Batalha', 'Resistência a dano Cortante, Perfurante e de Concussão.'],
       ], {
+        featurePicks: [canalizarDeSubclasse('canalizar-divindade', 'ataque-direcionado', 'Ataque Direcionado', 'Reação, quando você ou um aliado a até 9 m erra um ataque: some +10 à jogada de ataque, possivelmente transformando-a em acerto.')],
         alwaysPrepared: semprePreparadas({
           3: ['arma-espiritual', 'arma-magica', 'escudo-da-fe', 'raio-guia'],
           5: ['guardioes-espirituais', 'manto-do-cruzado'],
@@ -389,6 +413,9 @@ export const CLASSES: DndClass[] = [
   // ================= DRUIDA =================
   {
     id: 'druida',
+    multiclassReq: { any: ['sab'] },
+    multiclassArmor: ['Leve', 'Média', 'Escudos'],
+    multiclassWeapons: [],
     name: 'Druida',
     hitDie: 8,
     primary: 'Sabedoria',
@@ -548,6 +575,9 @@ export const CLASSES: DndClass[] = [
   // ================= GUERREIRO =================
   {
     id: 'guerreiro',
+    multiclassReq: { any: ['for', 'des'] },
+    multiclassArmor: ['Leve', 'Média', 'Escudos'],
+    multiclassWeapons: ['Simples', 'Marciais'],
     name: 'Guerreiro',
     hitDie: 10,
     primary: 'Força ou Destreza',
@@ -610,7 +640,16 @@ export const CLASSES: DndClass[] = [
         [10, 'Manobras Aprimoradas', 'Dados de superioridade viram d10; mais manobras.'],
         [15, 'Implacável', 'Ao rolar Iniciativa sem dados de superioridade, recupere um.'],
         [18, 'Dados Supremos', 'Dados de superioridade viram d12.'],
-      ]),
+      ], {
+        featurePicks: [MANOBRAS],
+        resources: [{
+          id: 'dados-de-superioridade',
+          name: 'Dados de Superioridade',
+          fromLevel: 3,
+          recharge: 'curto',
+          max: (lv) => (lv >= 15 ? 6 : lv >= 7 ? 5 : 4),
+        }],
+      }),
       sub('campeao', 'Campeão', 'Força bruta e físico apurado.', [
         [3, 'Crítico Aprimorado', 'Seus ataques com arma critam com 19-20.'],
         [3, 'Atleta Notável', 'Vantagem em Iniciativa e testes de Atletismo.'],
@@ -619,7 +658,7 @@ export const CLASSES: DndClass[] = [
         [15, 'Crítico Superior', 'Crítico com 18-20.'],
         [18, 'Sobrevivente', 'Regeneração: recupere PV no início dos seus turnos quando ferido.'],
       ]),
-      sub('cavaleiro-arcano', 'Cavaleiro Místico (Arcano)', 'Guerreiro que entrelaça magia arcana ao aço.', [
+      sub('cavaleiro-arcano', 'Cavaleiro Místico', 'Guerreiro que entrelaça magia arcana ao aço.', [
         [3, 'Conjuração', 'Você conjura magias da lista de Mago usando Inteligência: 2 truques (3 no nível 10) e a lista de magias preparadas da tabela de Cavaleiro Místico. Ao subir de nível você pode trocar uma magia preparada e um truque.'],
         [3, 'Vínculo com Arma', 'Invoque armas vinculadas à sua mão; impossível ser desarmado.'],
         [7, 'Magia de Guerra', 'Após conjurar um truque, ataque como Bônus.'],
@@ -638,13 +677,26 @@ export const CLASSES: DndClass[] = [
         [10, 'Barreira Protegida', 'Resistência psíquica; proteja aliados com a mente.'],
         [15, 'Mestre Telecinético', 'Conjure Telecinésia; dados viram d10.'],
         [18, 'Mente de Aço', 'Salvaguardas mentais aprimoradas; dados viram d12.'],
-      ]),
+      ], {
+        featurePicks: [PODER_PSIONICO_GUERREIRO],
+        resources: [{
+          id: 'energia-psionica-guerreiro',
+          name: 'Dados de Energia Psiônica',
+          fromLevel: 3,
+          recharge: 'longo',
+          shortRestUses: 1,
+          max: (_lv, _m, charLevel) => 2 * pb(charLevel),
+        }],
+      }),
     ],
   },
 
   // ================= MONGE =================
   {
     id: 'monge',
+    multiclassReq: { all: ['des', 'sab'] },
+    multiclassArmor: [],
+    multiclassWeapons: ['Simples', 'Marciais com propriedade Leve'],
     name: 'Monge',
     hitDie: 8,
     primary: 'Destreza e Sabedoria',
@@ -664,7 +716,7 @@ export const CLASSES: DndClass[] = [
     features: [
       { level: 1, name: 'Artes Marciais', desc: 'Ataques desarmados/armas de monge usam d6 (aumenta com o nível) e podem usar DES; ataque desarmado como ação Bônus.' },
       { level: 1, name: 'Defesa sem Armadura', desc: 'Sem armadura nem escudo, CA = 10 + mod. DES + mod. SAB.' },
-      { level: 2, name: 'Foco (Chi)', desc: 'Pontos de Foco = nível de Monge: Rajada de Golpes (2 ataques Bônus), Defesa Paciente (Esquivar Bônus), Passo do Vento (Desengajar/Correr Bônus). Recupera em descanso curto.' },
+      { level: 2, name: 'Foco', desc: 'Pontos de Foco = nível de Monge: Rajada de Golpes (2 ataques Bônus), Defesa Paciente (Esquivar Bônus), Passo do Vento (Desengajar/Correr Bônus). Recupera em descanso curto.' },
       { level: 2, name: 'Metabolismo Sobrenatural', desc: '1×/descanso longo, recupere PV (rolagem do Dado de Artes Marciais × nível) e todo o Foco ao rolar Iniciativa.' },
       { level: 2, name: 'Movimento sem Armadura', desc: '+3 m de deslocamento sem armadura (aumenta com o nível).' },
       subclassFeat(3, 'Tradição Monástica'),
@@ -690,6 +742,7 @@ export const CLASSES: DndClass[] = [
       epicBoon(),
       { level: 20, name: 'Defesa do Corpo e da Mente', desc: 'DES e SAB +4 (máx. 25).' },
     ],
+    featurePicks: [DISCIPLINAS_DE_FOCO],
     resources: [
       { id: 'foco', name: 'Pontos de Foco', fromLevel: 2, recharge: 'curto', max: (lv) => lv },
     ],
@@ -724,6 +777,9 @@ export const CLASSES: DndClass[] = [
   // ================= PALADINO =================
   {
     id: 'paladino',
+    multiclassReq: { all: ['for', 'car'] },
+    multiclassArmor: ['Leve', 'Média', 'Escudos'],
+    multiclassWeapons: ['Simples', 'Marciais'],
     name: 'Paladino',
     hitDie: 10,
     primary: 'Força e Carisma',
@@ -750,7 +806,7 @@ export const CLASSES: DndClass[] = [
       { level: 1, name: 'Impor as Mãos', desc: 'Reserva de cura = 5 × nível de Paladino. Bônus: cure PV ou remova a condição Envenenado (custo 5).' },
       { level: 1, name: 'Conjuração', desc: 'Você conjura magias de Paladino usando Carisma.' },
       { level: 1, name: 'Maestria em Armas', desc: 'Use as propriedades de maestria de 2 tipos de armas.' },
-      { level: 2, name: 'Golpe Divino (Smite)', desc: 'Castigo Divino sempre preparado; conjure 1×/descanso longo sem gastar espaço.' },
+      { level: 2, name: 'Golpe Divino', desc: 'Castigo Divino sempre preparado; conjure 1×/descanso longo sem gastar espaço.' },
       { level: 2, name: 'Estilo de Luta', desc: 'Escolha um talento de Estilo de Luta (ou Combatente Abençoado: truques de Clérigo).' },
       subclassFeat(3, 'Juramento Sagrado'),
       { level: 3, name: 'Canalizar Divindade', desc: 'Usos do poder do juramento. Recupere 1 uso em descanso curto.' },
@@ -771,6 +827,7 @@ export const CLASSES: DndClass[] = [
       epicBoon(),
       { level: 20, name: 'Característica de Subclasse (Ápice)', desc: 'A transformação máxima do seu Juramento.' },
     ],
+    featurePicks: [CANALIZAR_DIVINDADE_PALADINO],
     resources: [
       { id: 'canalizar-divindade-paladino', name: 'Canalizar Divindade', fromLevel: 3, recharge: 'longo', shortRestUses: 1, max: (lv) => (lv >= 11 ? 3 : 2) },
       { id: 'impor-as-maos', name: 'Impor as Mãos (PV na reserva)', fromLevel: 1, recharge: 'longo', max: (lv) => lv * 5 },
@@ -783,6 +840,7 @@ export const CLASSES: DndClass[] = [
         [15, 'Vontade Inabalável', 'Vantagem em salvaguardas contra magias de Encantamento.'],
         [20, 'Auréola Sagrada', 'Forma angelical: luz solar, dano radiante, salvaguardas superiores.'],
       ], {
+        featurePicks: [canalizarDeSubclasse('canalizar-divindade-paladino', 'arma-sagrada', 'Arma Sagrada', 'Ação Bônus: por 10 minutos, some seu modificador de Carisma às jogadas de ataque de uma arma sua, que emite luz plena de 6 m.')],
         alwaysPrepared: semprePreparadas({
           3: ['escudo-da-fe', 'protecao-contra-o-bem-e-o-mal'],
           5: ['auxilio', 'zona-da-verdade'],
@@ -799,6 +857,7 @@ export const CLASSES: DndClass[] = [
         [15, 'Defesa Gloriosa', 'Reação que aumenta a CA do alvo e pune o atacante.'],
         [20, 'Avatar da Glória', 'Velocidade e presença lendárias.'],
       ], {
+        featurePicks: [canalizarDeSubclasse('canalizar-divindade-paladino', 'atleta-inspirador', 'Atleta Inspirador', 'Ação Bônus: você e aliados a até 9 m ganham 3 m de deslocamento e vantagem em testes de Força até o fim do seu próximo turno.')],
         alwaysPrepared: semprePreparadas({
           3: ['heroismo', 'raio-guia'],
           5: ['aprimorar-atributo', 'arma-magica'],
@@ -814,6 +873,7 @@ export const CLASSES: DndClass[] = [
         [15, 'Sentinela Imortal', '1×/dia, ao cair a 0 PV, fique com 1 PV; não envelhece.'],
         [20, 'Campeão Ancião', 'Forma primaveril: regeneração e magias aceleradas.'],
       ], {
+        featurePicks: [canalizarDeSubclasse('canalizar-divindade-paladino', 'ira-da-natureza', 'Ira da Natureza', 'Ação Mágica: criaturas a até 4,5 m fazem salvaguarda de Força; falhando ficam Contidas por vinhas espectrais por 1 minuto.')],
         alwaysPrepared: semprePreparadas({
           3: ['falar-com-animais', 'golpe-constritor'],
           5: ['passo-nebuloso', 'raio-lunar'],
@@ -829,6 +889,7 @@ export const CLASSES: DndClass[] = [
         [15, 'Alma de Vingança', 'Reação: ataque quem tem seu Voto quando ele atacar.'],
         [20, 'Anjo Vingador', 'Asas e aura de medo por 10 minutos.'],
       ], {
+        featurePicks: [canalizarDeSubclasse('canalizar-divindade-paladino', 'voto-de-inimizade', 'Voto de Inimizade', 'Ação Bônus: escolha uma criatura a até 9 m; por 1 minuto você tem vantagem nas jogadas de ataque contra ela.')],
         alwaysPrepared: semprePreparadas({
           3: ['marca-do-predador', 'perdicao'],
           5: ['paralisar-pessoa', 'passo-nebuloso'],
@@ -843,6 +904,9 @@ export const CLASSES: DndClass[] = [
   // ================= PATRULHEIRO =================
   {
     id: 'patrulheiro',
+    multiclassReq: { all: ['des', 'sab'] },
+    multiclassArmor: ['Leve', 'Média', 'Escudos'],
+    multiclassWeapons: ['Simples', 'Marciais'],
     name: 'Patrulheiro',
     hitDie: 10,
     primary: 'Destreza e Sabedoria',
@@ -922,7 +986,7 @@ export const CLASSES: DndClass[] = [
           17: ['despistar'],
         }),
       }),
-      sub('perseguidor-sombrio', 'Vigilante das Sombras (Gloom Stalker)', 'Caçador das trevas e do subterrâneo.', [
+      sub('perseguidor-sombrio', 'Vigilante das Sombras', 'Caçador das trevas e do subterrâneo.', [
         [3, 'Magias do Vigilante das Sombras', 'Disfarçar-se fica sempre preparada; mais magias nos níveis 5, 9, 13 e 17.'],
         [3, 'Emboscada Terrível', 'No 1º turno: +3 m, ataque adicional com +1d8; invisível para visão no escuro.'],
         [3, 'Visão Umbral', 'Visão no escuro 18 m (ou +18 m).'],
@@ -944,6 +1008,9 @@ export const CLASSES: DndClass[] = [
   // ================= LADINO =================
   {
     id: 'ladino',
+    multiclassReq: { any: ['des'] },
+    multiclassArmor: ['Leve'],
+    multiclassWeapons: ['Simples', 'Marciais com propriedade Leve ou Acuidade'],
     name: 'Ladino',
     hitDie: 8,
     primary: 'Destreza',
@@ -978,7 +1045,7 @@ export const CLASSES: DndClass[] = [
       asi(8),
       { level: 9, name: 'Característica de Subclasse', desc: 'Você ganha uma característica do seu Arquétipo.' },
       asi(10),
-      { level: 11, name: 'Golpes Ardilosos Aprimorados', desc: 'Novos efeitos: Atordoar (Daze), Golpe Preciso.' },
+      { level: 11, name: 'Golpes Ardilosos Aprimorados', desc: 'Novos efeitos: Atordoar, Golpe Preciso.' },
       asi(12),
       { level: 13, name: 'Característica de Subclasse', desc: 'Você ganha uma característica do seu Arquétipo.' },
       { level: 14, name: 'Sentidos Cegos', desc: 'Percepção às Cegas 3 m.' },
@@ -1008,13 +1075,23 @@ export const CLASSES: DndClass[] = [
         [13, 'Toque Mortal', 'Envenenar golpes: dano extra de veneno.'],
         [17, 'Golpe da Morte', 'Contra surpresos: dobre o dano do ataque (SG CON).'],
       ]),
-      sub('faca-espiritual', 'Lâmina da Alma (Soulknife)', 'Lâminas psíquicas nascidas da mente.', [
+      sub('faca-espiritual', 'Lâmina da Alma', 'Lâminas psíquicas nascidas da mente.', [
         [3, 'Lâminas Psíquicas', 'Crie lâminas de energia (1d6/1d4 psíquico, arremessáveis).'],
         [3, 'Poder Psiônico', 'Dados psiônicos: some a testes falhos; comunicação telepática.'],
         [9, 'Almas Entrelaçadas', 'Teleporte curto; invisibilidade breve com dados psiônicos.'],
         [13, 'Véu Psíquico', 'Invisibilidade por 1 hora (1×/descanso longo ou com dado).'],
         [17, 'Rasgo na Mente', 'Sua lâmina pode Atordoar (SG SAB).'],
-      ]),
+      ], {
+        featurePicks: [PODER_PSIONICO_LADINO],
+        resources: [{
+          id: 'energia-psionica-ladino',
+          name: 'Dados de Energia Psiônica',
+          fromLevel: 3,
+          recharge: 'longo',
+          shortRestUses: 1,
+          max: (_lv, _m, charLevel) => 2 * pb(charLevel),
+        }],
+      }),
       sub('trapaceiro-arcano', 'Trapaceiro Arcano', 'Ladino que tempera golpes com magia.', [
         [3, 'Conjuração', 'Você conjura magias da lista de Mago usando Inteligência: 3 truques — Mãos Mágicas e mais dois (4 no nível 10) — e a lista de magias preparadas da tabela de Trapaceiro Arcano. Ao subir de nível você pode trocar uma magia preparada e um truque (exceto Mãos Mágicas).'],
         [3, 'Mão Mágica Ardilosa', 'Mão Mágica invisível; abra fechaduras e bata carteiras a distância.'],
@@ -1034,6 +1111,9 @@ export const CLASSES: DndClass[] = [
   // ================= FEITICEIRO =================
   {
     id: 'feiticeiro',
+    multiclassReq: { any: ['car'] },
+    multiclassArmor: [],
+    multiclassWeapons: [],
     name: 'Feiticeiro',
     hitDie: 6,
     primary: 'Carisma',
@@ -1074,6 +1154,7 @@ export const CLASSES: DndClass[] = [
       epicBoon(),
       { level: 20, name: 'Apoteose Arcana', desc: 'Em Feitiçaria Inata, use 1 opção de Metamagia grátis por turno.' },
     ],
+    featurePicks: [METAMAGIA],
     resources: [
       { id: 'pontos-de-feiticaria', name: 'Pontos de Feitiçaria', fromLevel: 2, recharge: 'longo', max: (lv) => lv },
       { id: 'feiticaria-inata', name: 'Feitiçaria Inata', fromLevel: 1, recharge: 'longo', max: () => 2 },
@@ -1134,6 +1215,9 @@ export const CLASSES: DndClass[] = [
   // ================= BRUXO =================
   {
     id: 'bruxo',
+    multiclassReq: { any: ['car'] },
+    multiclassArmor: ['Leve'],
+    multiclassWeapons: ['Simples'],
     name: 'Bruxo',
     hitDie: 8,
     primary: 'Carisma',
@@ -1170,7 +1254,7 @@ export const CLASSES: DndClass[] = [
     features: [
       { level: 1, name: 'Conjuração de Pacto', desc: 'Espaços de Pacto: poucos, mas sempre no nível máximo e recuperados em descanso curto.' },
       { level: 1, name: 'Invocações Místicas', desc: 'Fragmentos de poder (1 no nível 1, até 10 no 20): Explosão Agonizante, Visão Diabólica, Pacto da Lâmina/da Corrente/do Tomo etc.' },
-      { level: 2, name: 'Magical Cunning', desc: 'Astúcia Mágica: 1×/dia, recupere metade dos espaços de Pacto com 1 minuto de ritual.' },
+      { level: 2, name: 'Astúcia Mágica', desc: 'Astúcia Mágica: 1×/dia, recupere metade dos espaços de Pacto com 1 minuto de ritual.' },
       subclassFeat(3, 'Patrono Sobrenatural'),
       asi(4),
       { level: 5, name: 'Invocações (3)', desc: 'Você tem mais Invocações Místicas (total conforme a tabela).' },
@@ -1188,6 +1272,7 @@ export const CLASSES: DndClass[] = [
       epicBoon(),
       { level: 20, name: 'Mestre Sobrenatural', desc: 'Astúcia Mágica recupera todos os espaços de Pacto.' },
     ],
+    featurePicks: [INVOCACOES_MISTICAS],
     resources: [
       { id: 'astucia-magica', name: 'Astúcia Mágica', fromLevel: 2, recharge: 'longo', max: () => 1 },
     ],
@@ -1220,7 +1305,7 @@ export const CLASSES: DndClass[] = [
           9: ['convocar-celestial', 'restauracao-maior'],
         }),
       }),
-      sub('infernal', 'Patrono Ínfero (Fiend)', 'Um pacto com poderes dos Planos Inferiores.', [
+      sub('infernal', 'Patrono Ínfero', 'Um pacto com poderes dos Planos Inferiores.', [
         [3, 'Magias de Pacto do Ínfero', 'Comando, Mãos Flamejantes, Raio Ardente e Sugestão ficam sempre preparadas; mais magias nos níveis 5, 7 e 9.'],
         [3, 'Bênção do Tinhoso', 'Ao reduzir um inimigo a 0 PV, ganhe PV temporário (CAR + nível).'],
         [6, 'Sorte do Tinhoso', 'Some 1d10 a um Teste D20 (1×/descanso curto).'],
@@ -1240,7 +1325,7 @@ export const CLASSES: DndClass[] = [
         [3, 'Mente Desperta', 'Conexão telepática com uma criatura próxima.'],
         [6, 'Combatente Clarividente', 'A criatura ligada a você faz salvaguarda de SAB ou fica em desvantagem contra você.'],
         [10, 'Proteção Talássica', 'PV temporário ao conjurar; resistência psíquica.'],
-        [14, 'Criar Escravo (Servo)', 'Enfeitice uma criatura tocada permanentemente (SG SAB).'],
+        [14, 'Criar Servo', 'Enfeitice uma criatura tocada permanentemente (SG SAB).'],
       ], {
         alwaysPrepared: semprePreparadas({
           3: ['detectar-pensamentos', 'forca-espectral', 'gargalhada-nefasta-de-tasha', 'sussurros-dissonantes'],
@@ -1255,6 +1340,9 @@ export const CLASSES: DndClass[] = [
   // ================= MAGO =================
   {
     id: 'mago',
+    multiclassReq: { any: ['int'] },
+    multiclassArmor: [],
+    multiclassWeapons: [],
     name: 'Mago',
     hitDie: 6,
     primary: 'Inteligência',
@@ -1294,6 +1382,7 @@ export const CLASSES: DndClass[] = [
       epicBoon(),
       { level: 20, name: 'Magias Exemplares', desc: 'Duas magias de 3º nível sempre preparadas, conjuráveis 1×/turno sem espaço.' },
     ],
+    featurePicks: [OPCOES_DE_RECUPERACAO],
     resources: [
       { id: 'recuperacao-arcana', name: 'Recuperação Arcana', fromLevel: 1, recharge: 'longo', max: () => 1 },
     ],
