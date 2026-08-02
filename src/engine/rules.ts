@@ -836,15 +836,35 @@ export function characterResources(char: Character): ResourceState[] {
 
   // Recursos de espécie
   const pb = proficiencyBonus(char.level)
-  const speciesRes: Record<string, ResourceState> = {
-    aasimar: { id: 'maos-curativas', name: 'Mãos Curativas', max: 1, used: char.resourcesUsed['maos-curativas'] ?? 0, recharge: 'longo' },
-    draconato: { id: 'sopro-draconico', name: 'Sopro Dracônico', max: pb, used: char.resourcesUsed['sopro-draconico'] ?? 0, recharge: 'longo' },
-    anao: { id: 'conhecimento-da-pedra', name: 'Conhecimento da Pedra', max: pb, used: char.resourcesUsed['conhecimento-da-pedra'] ?? 0, recharge: 'longo' },
-    golias: { id: 'dadiva-de-gigante', name: 'Dádiva de Gigante', max: pb, used: char.resourcesUsed['dadiva-de-gigante'] ?? 0, recharge: 'longo' },
-    orc: { id: 'resistencia-implacavel', name: 'Resistência Implacável', max: 1, used: char.resourcesUsed['resistencia-implacavel'] ?? 0, recharge: 'longo' },
+  const usado = (id: string) => char.resourcesUsed[id] ?? 0
+  const speciesRes: Record<string, ResourceState[]> = {
+    aasimar: [
+      { id: 'maos-curativas', name: 'Mãos Curativas', max: 1, used: usado('maos-curativas'), recharge: 'longo' },
+      ...(char.level >= 3
+        ? [{ id: 'revelacao-celestial', name: 'Revelação Celestial', max: 1, used: usado('revelacao-celestial'), recharge: 'longo' as const }]
+        : []),
+    ],
+    draconato: [
+      { id: 'sopro-draconico', name: 'Sopro Dracônico', max: pb, used: usado('sopro-draconico'), recharge: 'longo' },
+      ...(char.level >= 5
+        ? [{ id: 'voo-draconico', name: 'Voo Dracônico', max: 1, used: usado('voo-draconico'), recharge: 'longo' as const }]
+        : []),
+    ],
+    anao: [
+      { id: 'conhecimento-da-pedra', name: 'Conhecimento da Pedra', max: pb, used: usado('conhecimento-da-pedra'), recharge: 'longo' },
+    ],
+    golias: [
+      { id: 'dadiva-de-gigante', name: 'Dádiva de Gigante', max: pb, used: usado('dadiva-de-gigante'), recharge: 'longo' },
+      ...(char.level >= 5
+        ? [{ id: 'forma-de-gigante', name: 'Forma de Gigante', max: 1, used: usado('forma-de-gigante'), recharge: 'longo' as const }]
+        : []),
+    ],
+    orc: [
+      { id: 'investida-adrenalizada', name: 'Investida Adrenalizada', max: pb, used: usado('investida-adrenalizada'), recharge: 'curto' },
+      { id: 'resistencia-implacavel', name: 'Resistência Implacável', max: 1, used: usado('resistencia-implacavel'), recharge: 'longo' },
+    ],
   }
-  const sr = speciesRes[char.speciesId]
-  if (sr) list.push(sr)
+  list.push(...(speciesRes[char.speciesId] ?? []))
 
   // Talento Sortudo
   if (hasFeat(char, 'sortudo-talento')) {

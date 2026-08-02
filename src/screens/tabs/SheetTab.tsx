@@ -16,10 +16,14 @@ import { backgroundById } from '../../data/backgrounds'
 import { Card, Sheet } from '../../components/ui'
 
 export function SheetTab({ char }: { char: Character }) {
-  const { pushRoll, applyDamage, heal, setTempHp, shortRest, longRest, spendHitDie, useResource } = useStore()
+  const {
+    pushRoll, applyDamage, heal, setTempHp, shortRest, longRest, spendHitDie, useResource,
+    setDeathSaves, rollDeathSave,
+  } = useStore()
   const [hpDelta, setHpDelta] = useState(0)
   const [restSheet, setRestSheet] = useState<'curto' | 'longo' | null>(null)
   const [restMsg, setRestMsg] = useState<string[]>([])
+  const [deathMsg, setDeathMsg] = useState<string | null>(null)
 
   const abs = finalAbilities(char)
   const mods = abilityMods(char)
@@ -44,6 +48,30 @@ export function SheetTab({ char }: { char: Character }) {
   // O resultado aparece no aviso flutuante (RollToast), visível em qualquer ponto da página.
   const doRoll = (label: string, modifier: number) => {
     pushRoll(roll({ label, sides: 20, modifier, isD20Test: true }))
+  }
+
+  // --- Teste de Morte ---
+  const morrendo = hp <= 0
+  const ds = char.deathSaves
+  const morto = ds.failures >= 3
+  const estavel = ds.successes >= 3 && !morto
+
+  const doDeathSave = () => {
+    const entry = rollDeathSave(char.id)
+    if (!entry) return
+    const dado = entry.rolls[0]
+    if (dado === 20) setDeathMsg('20 natural! Você recupera 1 PV e volta à consciência.')
+    else if (dado === 1) setDeathMsg('1 natural: conta como DUAS falhas.')
+    else if (dado >= 10) setDeathMsg(`${dado}: sucesso.`)
+    else setDeathMsg(`${dado}: falha.`)
+  }
+
+  // Alternar marcador: clicar no último preenchido desmarca; nos demais, marca até ali.
+  const marcar = (kind: 'successes' | 'failures', i: number) => {
+    const atual = ds[kind]
+    const novo = i + 1 === atual ? i : i + 1
+    setDeathSaves(char.id, { ...ds, [kind]: novo })
+    setDeathMsg(null)
   }
 
   const doShortRest = () => {
@@ -108,6 +136,64 @@ export function SheetTab({ char }: { char: Character }) {
           <button className="sm primary" style={{ flex: 1 }} onClick={doLongRest}>🌙 Descanso Longo</button>
         </div>
       </Card>
+
+      {/* --- Teste de Morte --- */}
+      <div className={`death-wrap${morrendo && !morto && !estavel ? ' destaque' : ''}`}>
+        <Card title="☠️ Teste de Morte">
+          {morrendo && !morto && !estavel && (
+            <div className="banner warn">
+              Você está a <strong>0 PV</strong> e Inconsciente: no início de cada turno seu, role um Teste de Morte!
+            </div>
+          )}
+          {morto && (
+            <div className="banner warn"><strong>3 falhas — o personagem morreu.</strong></div>
+          )}
+          {estavel && (
+            <div className="banner ok">3 sucessos — você está <strong>Estável</strong> (permanece a 0 PV, Inconsciente).</div>
+          )}
+
+          <div className="grid g2" style={{ marginTop: 4 }}>
+            <div>
+              <div className="tiny muted" style={{ marginBottom: 4 }}>Sucessos ✚</div>
+              <div className="row" style={{ gap: 8 }}>
+                {[0, 1, 2].map((i) => (
+                  <button
+                    key={i}
+                    className={`death-pip ok${i < ds.successes ? ' on' : ''}`}
+                    aria-label={`Marcar sucesso ${i + 1}`}
+                    onClick={() => marcar('successes', i)}
+                  >{i < ds.successes ? '●' : '○'}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="tiny muted" style={{ marginBottom: 4 }}>Falhas ✖</div>
+              <div className="row" style={{ gap: 8 }}>
+                {[0, 1, 2].map((i) => (
+                  <button
+                    key={i}
+                    className={`death-pip bad${i < ds.failures ? ' on' : ''}`}
+                    aria-label={`Marcar falha ${i + 1}`}
+                    onClick={() => marcar('failures', i)}
+                  >{i < ds.failures ? '●' : '○'}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <button
+            className="primary"
+            style={{ width: '100%', marginTop: 12 }}
+            disabled={morto || estavel}
+            onClick={doDeathSave}
+          >🎲 Rolar Teste de Morte (1d20)</button>
+          {deathMsg && <div className="tiny center" style={{ marginTop: 8 }}>{deathMsg}</div>}
+          <p className="muted tiny" style={{ marginTop: 8 }}>
+            10 ou mais: sucesso · 9 ou menos: falha · 1 natural: duas falhas · 20 natural: recupera 1 PV.
+            Três sucessos: Estável. Três falhas: morte. Recuperar PV zera os marcadores.
+          </p>
+        </Card>
+      </div>
 
       {/* --- Combate --- */}
       <Card title="Combate">
