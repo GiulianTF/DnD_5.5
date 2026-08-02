@@ -7,6 +7,8 @@ import { CharacterCreator } from './screens/CharacterCreator'
 import { CharacterSheet } from './screens/CharacterSheet'
 import { CharacterList } from './screens/CharacterList'
 import { CloudTab } from './screens/CloudTab'
+import { PatchNotes, VersionBadge } from './screens/PatchNotes'
+import { APP_VERSION, PATCH_NOTES } from './data/patch-notes'
 import { LevelUpWizard } from './screens/LevelUpWizard'
 import { SheetTab } from './screens/tabs/SheetTab'
 import { SkillsTab } from './screens/tabs/SkillsTab'
@@ -96,10 +98,27 @@ useStore.setState({ characters: [guerreiro, mago, bruxo], activeId: guerreiro.id
 
 console.log('\n== Telas principais ==')
 tenta('App (lista de fichas)', () => renderToString(<App />))
-tenta('CharacterList', () => renderToString(<CharacterList onNew={() => {}} onOpen={() => {}} />))
+tenta('CharacterList', () => renderToString(<CharacterList onNew={() => {}} onOpen={() => {}} onNovidades={() => {}} />))
 tenta('CharacterCreator', () => renderToString(<CharacterCreator onDone={() => {}} onCancel={() => {}} />))
 tenta('CloudTab', () => renderToString(<CloudTab online={true} />))
 tenta('DiceRollerSheet', () => renderToString(<DiceRollerSheet onClose={() => {}} />))
+
+// Novidades: todas as versoes na tela, a mais nova em cima e marcada como atual.
+exige('PatchNotes (todas as versoes)',
+  () => renderToString(<PatchNotes />),
+  [...PATCH_NOTES.map((n) => `v${n.version}`), PATCH_NOTES[0].titulo, 'versão atual'])
+exige('VersionBadge (versao nunca vista mostra o selo)',
+  () => renderToString(<VersionBadge onClick={() => {}} />), [`v${APP_VERSION}`, '✨'])
+tenta('PatchNotes (ordem: a versao atual vem primeiro)', () => {
+  const html = renderToString(<PatchNotes />)
+  const posicoes = PATCH_NOTES.map((n) => html.indexOf(`v${n.version}`))
+  const ausente = posicoes.findIndex((p) => p < 0)
+  if (ausente >= 0) throw new Error(`v${PATCH_NOTES[ausente].version} nao aparece na tela`)
+  for (let i = 1; i < posicoes.length; i++) {
+    if (posicoes[i] < posicoes[i - 1]) throw new Error(`v${PATCH_NOTES[i].version} aparece antes da anterior`)
+  }
+  return html
+})
 
 console.log('\n== Ficha completa (guerreiro nv12) ==')
 tenta('CharacterSheet', () => renderToString(<CharacterSheet char={guerreiro} onBack={() => {}} />))

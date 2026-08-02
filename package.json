@@ -1,7 +1,7 @@
 {
   "name": "fichas-dnd-2024",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.9.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,8 @@
     "test": "node scripts/run-tests.cjs",
     "test:regras": "node scripts/run-tests.cjs regras",
     "test:render": "node scripts/run-tests.cjs render",
-    "gerar-prod": "npm test && npm run build && vercel --prod --yes"
+    "versao": "node scripts/versao.cjs",
+    "gerar-prod": "node scripts/versao.cjs && npm test && npm run build && vercel --prod --yes"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.47.10",

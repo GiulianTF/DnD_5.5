@@ -27,19 +27,25 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($who)) {
 }
 Write-Ok "Logado como $($who.Trim())"
 
-# 1) Testes (regras + renderizacao). Comente este bloco se quiser pular.
+# 1) Versao: copia a versao da nota de atualizacao mais recente para o
+# package.json, de onde o build injeta a etiqueta de versao mostrada no app.
+Write-Step "Sincronizando a versao"
+node scripts/versao.cjs
+if ($LASTEXITCODE -ne 0) { Write-Err "Nao consegui definir a versao. Deploy cancelado."; exit 1 }
+
+# 2) Testes (regras + renderizacao). Comente este bloco se quiser pular.
 Write-Step "Rodando testes"
 npm test
 if ($LASTEXITCODE -ne 0) { Write-Err "Testes falharam. Deploy cancelado."; exit 1 }
 Write-Ok "Testes passaram"
 
-# 2) Build local (tsc -b + vite build) — pega erros de tipo antes de subir
+# 3) Build local (tsc -b + vite build) — pega erros de tipo antes de subir
 Write-Step "Gerando build local"
 npm run build
 if ($LASTEXITCODE -ne 0) { Write-Err "Build falhou. Deploy cancelado."; exit 1 }
 Write-Ok "Build gerado em dist/"
 
-# 3) Deploy de producao
+# 4) Deploy de producao
 Write-Step "Publicando na Vercel (producao)"
 vercel --prod --yes
 if ($LASTEXITCODE -ne 0) { Write-Err "Deploy falhou."; exit 1 }

@@ -7,12 +7,14 @@ import { CharacterCreator } from './screens/CharacterCreator'
 import { CharacterSheet } from './screens/CharacterSheet'
 import { CloudTab } from './screens/CloudTab'
 import { LoginScreen, SplashLoading } from './screens/LoginScreen'
+import { PatchNotes } from './screens/PatchNotes'
+import { APP_VERSION } from './data/patch-notes'
 import { DiceRollerSheet, RollToast } from './components/DiceRoller'
 
-type View = 'lista' | 'criar' | 'ficha' | 'nuvem'
+type View = 'lista' | 'criar' | 'ficha' | 'nuvem' | 'novidades'
 
 export default function App() {
-  const { characters, activeId, setActive } = useStore()
+  const { characters, activeId, setActive, marcarVersaoVista } = useStore()
   const { ready, session, offline, init } = useAuth()
   const [view, setView] = useState<View>('lista')
   const [roller, setRoller] = useState(false)
@@ -47,6 +49,9 @@ export default function App() {
 
   const char = characters.find((c) => c.id === activeId) ?? null
 
+  /** Abrir as notas já marca a versão como lida — o selo de novidade some. */
+  const abrirNovidades = () => { marcarVersaoVista(APP_VERSION); setView('novidades') }
+
   // Se a ficha ativa for excluída, volta para a lista
   useEffect(() => {
     if (view === 'ficha' && !char) setView('lista')
@@ -66,7 +71,11 @@ export default function App() {
       )}
 
       {view === 'lista' && (
-        <CharacterList onNew={() => setView('criar')} onOpen={() => setView('ficha')} />
+        <CharacterList
+          onNew={() => setView('criar')}
+          onOpen={() => setView('ficha')}
+          onNovidades={abrirNovidades}
+        />
       )}
 
       {view === 'criar' && (
@@ -85,7 +94,20 @@ export default function App() {
               <div className="sub">Sincronização, instalação e exportação</div>
             </div>
           </div>
-          <CloudTab online={online} />
+          <CloudTab online={online} onNovidades={abrirNovidades} />
+        </>
+      )}
+
+      {view === 'novidades' && (
+        <>
+          <div className="topbar">
+            <button className="ghost icon" onClick={() => setView('lista')} aria-label="Voltar">←</button>
+            <div style={{ flex: 1 }}>
+              <h1>Novidades</h1>
+              <div className="sub">O que mudou em cada versão</div>
+            </div>
+          </div>
+          <PatchNotes />
         </>
       )}
 

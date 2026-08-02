@@ -83,6 +83,8 @@ interface AppState {
   supabaseUrl: string
   supabaseKey: string
   lastSync: number | null
+  /** última versão cujas notas o jogador abriu — controla o selo de novidade */
+  versaoVista: string
 
   addCharacter: (c: Character) => void
   updateCharacter: (id: string, patch: Partial<Character> | ((c: Character) => Partial<Character>)) => void
@@ -95,6 +97,7 @@ interface AppState {
 
   setSupabase: (url: string, key: string) => void
   setLastSync: (t: number | null) => void
+  marcarVersaoVista: (v: string) => void
 
   // Ações de jogo
   spendSlot: (id: string, level: number, delta: number) => void
@@ -121,6 +124,7 @@ export const useStore = create<AppState>()(
       supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? '',
       supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
       lastSync: null,
+      versaoVista: '',
 
       addCharacter: (c) => set((s) => ({ characters: [...s.characters, normalizeCharacter(c)], activeId: c.id })),
 
@@ -145,6 +149,7 @@ export const useStore = create<AppState>()(
 
       setSupabase: (supabaseUrl, supabaseKey) => set({ supabaseUrl, supabaseKey }),
       setLastSync: (lastSync) => set({ lastSync }),
+      marcarVersaoVista: (versaoVista) => set({ versaoVista }),
 
       spendSlot: (id, level, delta) =>
         get().updateCharacter(id, (c) => {
@@ -272,6 +277,7 @@ export const useStore = create<AppState>()(
         supabaseUrl: s.supabaseUrl,
         supabaseKey: s.supabaseKey,
         lastSync: s.lastSync,
+        versaoVista: s.versaoVista,
       }),
       // Fichas salvas antes das escolhas de espécie/classe voltam sem esses campos.
       onRehydrateStorage: () => (state) => {

@@ -19,6 +19,7 @@ import { BACKGROUNDS } from './data/backgrounds'
 import { ALL_ITEMS, ARMORS, MAGIC_ITEMS, itemById } from './data/equipment'
 import { FEATS, featById } from './data/feats'
 import { skillById } from './data/skills'
+import { APP_VERSION, PATCH_NOTES, formatarData, notaAtual } from './data/patch-notes'
 
 // Roda no Node via scripts/run-tests.cjs; o projeto não depende de @types/node.
 declare const process: { exitCode?: number }
@@ -668,6 +669,28 @@ delete (antiga as Partial<Character>).classChoices
 delete (antiga as Partial<Character>).originFeats
 ok(normalizeCharacter(antiga).originFeats.length === 0, 'normalizeCharacter preenche os campos que faltam')
 ok(characterFeats(antiga).length > 0 && armorClass(antiga).total > 0, 'ficha antiga continua calculando sem quebrar')
+
+console.log('\n== Notas de atualizacao ==')
+// A primeira entrada manda: e dela que scripts/versao.cjs tira a versao do app.
+ok(PATCH_NOTES.length > 0, `ha ${PATCH_NOTES.length} nota(s) de atualizacao`)
+ok(APP_VERSION === PATCH_NOTES[0].version, `APP_VERSION segue a nota mais nova (${APP_VERSION})`)
+ok(notaAtual()?.version === APP_VERSION, 'notaAtual() devolve a nota da versao que esta rodando')
+
+const versaoNumero = (v: string) => v.split('.').map(Number).reduce((a, n) => a * 1000 + n, 0)
+for (let i = 0; i < PATCH_NOTES.length; i++) {
+  const n = PATCH_NOTES[i]
+  ok(/^\d+\.\d+\.\d+$/.test(n.version), `v${n.version}: versao no formato x.y.z`)
+  ok(/^\d{4}-\d{2}-\d{2}$/.test(n.date), `v${n.version}: data no formato aaaa-mm-dd`)
+  ok(n.titulo.length > 0 && n.resumo.length > 0, `v${n.version}: tem titulo e resumo`)
+  ok(n.destaques.length > 0 && n.destaques.every((d) => d.icone && d.texto),
+    `v${n.version}: ${n.destaques.length} destaque(s), todos com icone e texto`)
+  if (i > 0) {
+    ok(versaoNumero(PATCH_NOTES[i - 1].version) > versaoNumero(n.version),
+      `v${n.version} vem depois de v${PATCH_NOTES[i - 1].version} na lista`)
+  }
+}
+ok(new Set(PATCH_NOTES.map((n) => n.version)).size === PATCH_NOTES.length, 'nao ha versao repetida')
+ok(formatarData('2026-08-02') === '2 de agosto de 2026', `formatarData: ${formatarData('2026-08-02')}`)
 
 console.log(falhas === 0 ? '\n>>> TODOS OS TESTES DE REGRAS PASSARAM' : `\n>>> ${falhas} FALHA(S) NAS REGRAS`)
 if (falhas > 0) process.exitCode = 1
